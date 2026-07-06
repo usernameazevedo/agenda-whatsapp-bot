@@ -161,7 +161,7 @@ async function main() {
       `${CONFIG.destinatario}@c.us`,
       ...(CONFIG.chatsExtras ?? []),
     ]);
-    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '📝', '🕐', '📋', '⚠️', '👍'];
+    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍'];
     whatsapp.on('message_create', async (msg) => {
       try {
         const chat = await msg.getChat();

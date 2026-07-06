@@ -10,20 +10,52 @@ const fmtHora = new Intl.DateTimeFormat('pt-BR', {
   timeZone: CONFIG.timezone,
 });
 
-const AJUDA = `🤖 *Como me usar* (fala normal comigo!):
+const MANUAL = `👋 *Bem-vindo ao seu assistente de agenda!*
 
-• _"marca dentista quinta às 15h"_
-• _"me lembra de pagar o boleto amanhã"_
-• _"muda o horário da reunião com o Lukas"_
-• _"cancela o dentista"_
+Fala comigo em linguagem natural — sem comandos decorados. Tudo que altera a agenda pede sua confirmação com *S* ou *N* antes de executar.
 
-Sempre vou conferir data, início e fim com você e pedir confirmação antes de mexer na agenda.
+━━━━━━━━━━━━━━━
+📌 *MARCAR*
+Escreva o que, quando e a hora:
+• _marca reunião com o cliente quinta às 15h_
+• _ensaio de fotos dia 15, das 14h às 17h_
+• _me lembra de pagar o boleto amanhã_
+Sem hora de fim? Assumo *1h* de duração.
+Sem hora? Eu pergunto.
 
-*Comandos rápidos:*
-• *hoje* / *amanhã* / *semana* — resumos
+🔁 *REMARCAR*
+• _muda a gravação de quinta pra sexta de manhã_
+• _joga o dentista pra semana que vem_
+Se houver mais de um parecido, mostro uma lista numerada — responda *1*, *2*...
+
+🗑 *CANCELAR*
+• _cancela o ensaio de sexta_
+• _desmarca a reunião com o Lukas_
+
+👀 *CONSULTAR* (responde na hora, sem confirmação)
+• *hoje* — agenda de hoje
+• *amanhã* — agenda de amanhã
+• *semana* — visão da semana
 • *livre* — horários vagos de hoje
-• *agendas* — seus calendários
-• *ajuda* — esta mensagem`;
+• _o que tenho quinta?_ — também funciona em frase
+
+━━━━━━━━━━━━━━━
+⚙️ *RECURSOS AUTOMÁTICOS*
+• 07:00 — resumo do dia
+• Segunda 07:00 — resumo da semana
+• 21:00 — prévia de amanhã
+• 15 min antes — lembrete de cada reunião com link
+• 20:00 — checagem: pergunto se cada lembrete foi feito (*N* = joga pra amanhã)
+• Orçamentos — ao marcar "enviar orçamento", ofereço cobrar o retorno sozinho
+
+━━━━━━━━━━━━━━━
+🔧 *OUTROS COMANDOS*
+• *checagem* — roda a checagem do dia agora
+• *agendas* — lista seus calendários
+• *start* ou *ajuda* — mostra este manual
+
+Dica: nas confirmações, responda só *S* ou *N*. 😉`;
+
 
 function janela(dias, offsetDias = 0) {
   const inicio = new Date();
@@ -39,7 +71,7 @@ export async function processarComando(texto, auth, origem = 'self') {
 
   // comandos rápidos só valem quando não há conversa em andamento
   if (!temPendencia(origem)) {
-    if (lower === 'ajuda' || lower === 'help') return AJUDA;
+    if (lower === 'start' || lower === 'manual' || lower === 'menu' || lower === 'ajuda' || lower === 'help') return MANUAL;
     if (lower === 'hoje') return resumo('hoje', auth);
     if (lower === 'amanhã' || lower === 'amanha') return resumo('amanha', auth);
     if (lower === 'semana') return resumo('semana', auth);
