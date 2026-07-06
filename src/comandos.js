@@ -3,6 +3,7 @@ import { listarCalendarios, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
 import { conduzirConversa, temPendencia, dispararCheckDia } from './conversa.js';
+import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
 
 const fmtHora = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
@@ -31,6 +32,13 @@ Se houver mais de um parecido, mostro uma lista numerada — responda *1*, *2*..
 🗑 *CANCELAR*
 • _cancela o ensaio de sexta_
 • _desmarca a reunião com o Lukas_
+
+🔁 *LEMBRETE MENSAL INSISTENTE*
+Para contas e tarefas fixas do mês:
+• _pagar o cartão dia 10 de todo mês, me avisa até eu mandar "paguei o cartão"_
+Aviso *2 dias antes* (1x), *1 dia antes* (2x) e *no dia* de hora em hora, até você mandar a frase de baixa.
+• *recorrentes* — lista os ativos
+• _remover recorrente 1_ — apaga um
 
 👀 *CONSULTAR* (responde na hora, sem confirmação)
 • *hoje* — agenda de hoje
@@ -71,7 +79,15 @@ export async function processarComando(texto, auth, origem = 'self') {
 
   // comandos rápidos só valem quando não há conversa em andamento
   if (!temPendencia(origem)) {
+    // baixa de lembrete recorrente insistente (ex.: "paguei o cartão")
+    if (origem === 'self') {
+      const quitado = tentarCheck(msg);
+      if (quitado) return `✅ Anotado: *${quitado.titulo}* feito. Volto a te lembrar no próximo mês.`;
+    }
+
     if (lower === 'start' || lower === 'manual' || lower === 'menu' || lower === 'ajuda' || lower === 'help') return MANUAL;
+    if (lower === 'recorrentes' && origem === 'self') return listarRecorrentesMsg();
+    if (lower.startsWith('remover recorrente') && origem === 'self') return removerRecorrenteMsg(msg);
     if (lower === 'hoje') return resumo('hoje', auth);
     if (lower === 'amanhã' || lower === 'amanha') return resumo('amanha', auth);
     if (lower === 'semana') return resumo('semana', auth);
@@ -134,6 +150,24 @@ async function horariosLivres(auth) {
   if (livres.length === 0) return '😅 Dia cheio — nenhum intervalo de 30 min ou mais até as 22h.';
   const linhas = livres.map(([a, b]) => `• ${fmtHora.format(a)} – ${fmtHora.format(b)}`).join('\n');
   return `🕓 *Horários livres hoje:*\n${linhas}`;
+}
+
+function listarRecorrentesMsg() {
+  const lista = listarRecorrentes();
+  if (lista.length === 0) return 'Nenhum lembrete recorrente ativo. Crie dizendo algo como: _pagar o cartão dia 10 de todo mês, me avisa até eu mandar "paguei"_.';
+  const linhas = lista
+    .map((r, i) => `(${i + 1}) *${r.titulo}* — todo dia ${r.diaDoMes} · baixa: "${r.checkFrase}"`)
+    .join('\n');
+  return `🔁 *Lembretes recorrentes:*\n${linhas}\n\nPara apagar: _remover recorrente 1_`;
+}
+
+function removerRecorrenteMsg(msg) {
+  const n = parseInt(msg.match(/\d+/)?.[0] ?? '', 10);
+  const lista = listarRecorrentes();
+  if (!n || !lista[n - 1]) return 'Número inválido. Manda *recorrentes* para ver a lista.';
+  const alvo = lista[n - 1];
+  removerRecorrente(alvo.id);
+  return `✅ Removido: *${alvo.titulo}* (todo dia ${alvo.diaDoMes}).`;
 }
 
 async function listarAgendas(auth) {

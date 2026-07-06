@@ -6,6 +6,7 @@ import { getAuthClient, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { processarComando } from './comandos.js';
 import { dispararCobrancas, dispararCheckDia } from './conversa.js';
+import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 
@@ -33,6 +34,16 @@ whatsapp.on('qr', async (qr) => {
   }
   notificarMac('Agenda WhatsApp', 'Sessão expirou — precisa escanear o QR de novo (qr.png na pasta do projeto).');
 });
+
+// hora atual (0-23) no fuso configurado
+function horaAgora() {
+  const s = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    hour12: false,
+    timeZone: CONFIG.timezone,
+  }).format(new Date());
+  return Number(s) % 24;
+}
 
 function inicioDoDia(data, offsetDias = 0) {
   const d = new Date(data);
@@ -154,6 +165,11 @@ async function main() {
       const pergunta = await dispararCheckDia(auth);
       if (pergunta) await enviarMensagem(pergunta);
     }), opts);
+    // lembretes recorrentes insistentes: verifica no início de cada hora
+    cron.schedule('0 * * * *', () => comSaude(async () => {
+      const hora = horaAgora();
+      for (const msg of lembretesParaAgora(hora)) await enviarMensagem(msg);
+    }), opts);
 
     console.log(`Agendado: diário (${CONFIG.cronDiario}), semanal (${CONFIG.cronSemanal}), noturno (${CONFIG.cronNoturno}), lembretes ${CONFIG.lembreteMinutos.join('/')}min antes — ${CONFIG.timezone}`);
 
@@ -161,7 +177,7 @@ async function main() {
       `${CONFIG.destinatario}@c.us`,
       ...(CONFIG.chatsExtras ?? []),
     ]);
-    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍'];
+    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨'];
     whatsapp.on('message_create', async (msg) => {
       try {
         const chat = await msg.getChat();

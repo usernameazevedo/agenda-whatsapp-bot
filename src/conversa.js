@@ -11,6 +11,7 @@ import {
 } from './calendar.js';
 import { interpretar, gerarTexto } from './ia.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
+import { criarRecorrente, palavrasSignificativas } from './recorrentes.js';
 
 const PENDENCIA_TTL_MIN = 10;
 const DURACAO_PADRAO_MIN = 60;
@@ -72,6 +73,20 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   if (!intent || intent.acao === 'nada') return null;
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
 
+  // lembrete recorrente mensal insistente (ex.: pagar o cartão dia 10 de todo mês)
+  if (intent.recorrente) {
+    const novoRec = {
+      fase: 'rec_slots',
+      dados: {
+        titulo: intent.titulo ?? null,
+        diaDoMes: intent.diaDoMes ?? null,
+        checkFrase: intent.checkFrase ?? null,
+      },
+      criadoEm: Date.now(),
+    };
+    return avancarRecorrente(novoRec, key);
+  }
+
   const novo = {
     fase: 'slots',
     acao: intent.acao,
@@ -94,6 +109,8 @@ async function responderPendencia(texto, pend, auth, key) {
   if (pend.fase === 'followup_resposta') return responderFollowupResposta(texto, pend, auth, key);
   if (pend.fase === 'followup_texto') return responderFollowupTexto(texto, pend, key);
   if (pend.fase === 'checkdia') return responderCheckDia(texto, pend, auth, key);
+  if (pend.fase === 'rec_slots') return responderRecSlots(texto, pend, key);
+  if (pend.fase === 'rec_confirma') return responderRecConfirma(texto, pend, key);
 
   if (ehNao(texto)) {
     pendencias.delete(key);
@@ -310,6 +327,55 @@ async function responderFollowupTexto(texto, pend, key) {
     `Escreva uma mensagem curta e educada de WhatsApp, em português do Brasil, cobrando gentilmente o retorno de um cliente sobre este orçamento enviado: "${pend.cliente}". Tom profissional e direto, sem assinatura. Responda apenas o texto da mensagem.`
   );
   return sugestao ? `Sugestão de texto:\n\n${sugestao}` : 'Não consegui gerar o texto agora, tenta de novo mais tarde.';
+}
+
+// ─── lembretes recorrentes mensais insistentes ───────────────────────────────
+
+function avancarRecorrente(pend, key) {
+  pend.criadoEm = Date.now();
+  pendencias.set(key, pend);
+  const d = pend.dados;
+  if (!d.titulo) { pend.fase = 'rec_slots'; return 'O que você quer que eu lembre todo mês?'; }
+  if (!d.diaDoMes) { pend.fase = 'rec_slots'; return `"${d.titulo}" — em que dia do mês? (1 a 31)`; }
+  if (!d.checkFrase) {
+    pend.fase = 'rec_slots';
+    return `Qual frase você vai me mandar quando fizer, para eu parar de avisar? (ex.: "paguei o cartão")`;
+  }
+  pend.fase = 'rec_confirma';
+  return `Lembrete insistente todo dia ${d.diaDoMes}: *${d.titulo}*.\nAviso 2 dias antes (1x/dia), 1 dia antes (2x/dia) e no dia de hora em hora até você mandar "${d.checkFrase}".\nConfirma? (S/N)`;
+}
+
+function responderRecSlots(texto, pend, key) {
+  const d = pend.dados;
+  const t = texto.trim();
+  if (!d.titulo) {
+    d.titulo = t;
+  } else if (!d.diaDoMes) {
+    const n = parseInt(t.match(/\d+/)?.[0] ?? '', 10);
+    if (!n || n < 1 || n > 31) return 'Me diz um dia do mês entre 1 e 31.';
+    d.diaDoMes = n;
+  } else if (!d.checkFrase) {
+    const frase = t.replace(/^["']|["']$/g, '').trim();
+    if (palavrasSignificativas(frase).length === 0) {
+      return 'Preciso de uma frase mais específica (ex.: "paguei o cartão", "enviei o relatório") para reconhecer quando você fizer.';
+    }
+    d.checkFrase = frase;
+  }
+  return avancarRecorrente(pend, key);
+}
+
+function responderRecConfirma(texto, pend, key) {
+  if (ehNao(texto)) {
+    pendencias.delete(key);
+    return '❌ Ok, descartado. Nenhum lembrete recorrente criado.';
+  }
+  if (ehSim(texto)) {
+    pendencias.delete(key);
+    const d = pend.dados;
+    criarRecorrente({ titulo: d.titulo, diaDoMes: d.diaDoMes, checkFrase: d.checkFrase });
+    return `✅ Lembrete recorrente criado: *${d.titulo}*, todo dia ${d.diaDoMes}.\nVou te avisar de forma crescente até você mandar "${d.checkFrase}".`;
+  }
+  return 'Responde S para confirmar ou N para descartar.';
 }
 
 // ─── checagem de fim de dia dos lembretes ────────────────────────────────────

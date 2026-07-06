@@ -10,6 +10,7 @@ src/config.js
 
 # dados de runtime
 followups.json
+recorrentes.json
 agenda.log
 qr.png
 
