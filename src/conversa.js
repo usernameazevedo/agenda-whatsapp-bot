@@ -11,7 +11,7 @@ import {
 } from './calendar.js';
 import { interpretar, gerarTexto } from './ia.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
-import { criarRecorrente, palavrasSignificativas } from './recorrentes.js';
+import { criarRecorrente } from './recorrentes.js';
 
 const PENDENCIA_TTL_MIN = 10;
 const DURACAO_PADRAO_MIN = 60;
@@ -75,16 +75,10 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
 
   // lembrete recorrente mensal insistente (ex.: pagar o cartão dia 10 de todo mês)
   if (intent.recorrente) {
-    const novoRec = {
-      fase: 'rec_slots',
-      dados: {
-        titulo: intent.titulo ?? null,
-        diaDoMes: intent.diaDoMes ?? null,
-        checkFrase: intent.checkFrase ?? null,
-      },
-      criadoEm: Date.now(),
-    };
-    return avancarRecorrente(novoRec, key);
+    return avancarRecorrente(
+      { fase: 'rec_slots', dados: { titulo: intent.titulo ?? null, diaDoMes: intent.diaDoMes ?? null }, criadoEm: Date.now() },
+      key
+    );
   }
 
   const novo = {
@@ -331,35 +325,55 @@ async function responderFollowupTexto(texto, pend, key) {
 
 // ─── lembretes recorrentes mensais insistentes ───────────────────────────────
 
+// Atalho: começa o assistente de criação (comando "mensal")
+export function iniciarRecorrente(key = DEFAULT_KEY) {
+  return avancarRecorrente({ fase: 'rec_slots', dados: { titulo: null, diaDoMes: null }, criadoEm: Date.now() }, key);
+}
+
+// extrai "dia N" de uma frase e devolve { titulo, dia }
+function extrairTituloEDia(texto) {
+  const t = texto.trim();
+  const m = t.match(/\bdia\s+(\d{1,2})\b/i) || t.match(/\b(\d{1,2})\b/);
+  const dia = m ? parseInt(m[1], 10) : null;
+  const titulo = t
+    .replace(/\bdia\s+\d{1,2}\b/gi, '')
+    .replace(/\b(de\s+)?(todo|cada|por)\s+m[êe]s\b/gi, '')
+    .replace(/\bmensal\b/gi, '')
+    .replace(/\b\d{1,2}\b/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .replace(/\s+(de|do|da|no|na|por|e)$/i, '')
+    .trim();
+  return { titulo: titulo || null, dia: dia && dia >= 1 && dia <= 31 ? dia : null };
+}
+
 function avancarRecorrente(pend, key) {
   pend.criadoEm = Date.now();
   pendencias.set(key, pend);
   const d = pend.dados;
-  if (!d.titulo) { pend.fase = 'rec_slots'; return 'O que você quer que eu lembre todo mês?'; }
-  if (!d.diaDoMes) { pend.fase = 'rec_slots'; return `"${d.titulo}" — em que dia do mês? (1 a 31)`; }
-  if (!d.checkFrase) {
+  if (!d.titulo && !d.diaDoMes) {
     pend.fase = 'rec_slots';
-    return `Qual frase você vai me mandar quando fizer, para eu parar de avisar? (ex.: "paguei o cartão")`;
+    return 'O que lembrar e em que dia do mês? (ex.: _pagar cartão dia 10_)';
   }
+  if (!d.titulo) { pend.fase = 'rec_slots'; return 'E o que você quer lembrar nesse dia?'; }
+  if (!d.diaDoMes) { pend.fase = 'rec_slots'; return `"${d.titulo}" — em que dia do mês? (1 a 31)`; }
   pend.fase = 'rec_confirma';
-  return `Lembrete insistente todo dia ${d.diaDoMes}: *${d.titulo}*.\nAviso 2 dias antes (1x/dia), 1 dia antes (2x/dia) e no dia de hora em hora até você mandar "${d.checkFrase}".\nConfirma? (S/N)`;
+  return `Lembrete mensal todo dia ${d.diaDoMes}: *${d.titulo}*.\nInsisto 2 dias antes, 1 dia antes e no dia até você mandar "paguei"/"feito". (S/N)`;
 }
 
 function responderRecSlots(texto, pend, key) {
   const d = pend.dados;
-  const t = texto.trim();
-  if (!d.titulo) {
-    d.titulo = t;
+  // primeira resposta: tenta extrair título + dia de uma frase só
+  if (!d.titulo && !d.diaDoMes) {
+    const { titulo, dia } = extrairTituloEDia(texto);
+    if (titulo) d.titulo = titulo;
+    if (dia) d.diaDoMes = dia;
+  } else if (!d.titulo) {
+    d.titulo = texto.trim();
   } else if (!d.diaDoMes) {
-    const n = parseInt(t.match(/\d+/)?.[0] ?? '', 10);
+    const n = parseInt(texto.match(/\d+/)?.[0] ?? '', 10);
     if (!n || n < 1 || n > 31) return 'Me diz um dia do mês entre 1 e 31.';
     d.diaDoMes = n;
-  } else if (!d.checkFrase) {
-    const frase = t.replace(/^["']|["']$/g, '').trim();
-    if (palavrasSignificativas(frase).length === 0) {
-      return 'Preciso de uma frase mais específica (ex.: "paguei o cartão", "enviei o relatório") para reconhecer quando você fizer.';
-    }
-    d.checkFrase = frase;
   }
   return avancarRecorrente(pend, key);
 }
@@ -372,8 +386,8 @@ function responderRecConfirma(texto, pend, key) {
   if (ehSim(texto)) {
     pendencias.delete(key);
     const d = pend.dados;
-    criarRecorrente({ titulo: d.titulo, diaDoMes: d.diaDoMes, checkFrase: d.checkFrase });
-    return `✅ Lembrete recorrente criado: *${d.titulo}*, todo dia ${d.diaDoMes}.\nVou te avisar de forma crescente até você mandar "${d.checkFrase}".`;
+    criarRecorrente({ titulo: d.titulo, diaDoMes: d.diaDoMes });
+    return `✅ Lembrete mensal criado: *${d.titulo}*, todo dia ${d.diaDoMes}.`;
   }
   return 'Responde S para confirmar ou N para descartar.';
 }

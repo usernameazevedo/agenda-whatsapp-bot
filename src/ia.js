@@ -10,7 +10,7 @@ Responda APENAS o JSON, sem explicação:
 {"acao":"agendar|cancelar|remarcar|resumo|livre|nada","titulo":string|null,"busca":string|null,"inicio":"ISO8601 com -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"checkFrase":string|null}
 
 Regras:
-- Lembretes que se repetem TODO MÊS num dia fixo (ex.: "pagar o cartão dia 10 de todo mês", "todo dia 5 me lembra de X", "lembrete mensal insistente") => recorrente true, diaDoMes = número do dia (1-31), titulo = a tarefa, checkFrase = a frase que o usuário disser que vai mandar quando fizer (ex.: 'até eu mandar "paguei o cartão"' => checkFrase "paguei o cartão"; se não disser, null). Deixe inicio/fim null.
+- Lembretes que se repetem TODO MÊS num dia fixo (ex.: "pagar o cartão dia 10 de todo mês", "todo dia 5 me lembra de X", "lembrete mensal") => recorrente true, diaDoMes = número do dia (1-31), titulo = a tarefa (curto). Deixe inicio/fim null.
 - "me lembra de X", "lembrete: X", tarefas a fazer (SEM repetição mensal) => acao agendar com titulo X e lembrete true. Reuniões/encontros/consultas => lembrete false.
 - "cancela/desmarca X" => acao cancelar com busca X.
 - "muda/altera/remarca/joga X para <quando>" => acao remarcar com busca X e inicio novo.

@@ -20,6 +20,13 @@ const STOPWORDS = new Set([
   'um', 'uma', 'no', 'na', 'pro', 'pra', 'meu', 'minha', 'ja',
 ]);
 
+// verbos/expressões que sinalizam "concluí a tarefa"
+const PALAVRAS_FEITO = new Set([
+  'feito', 'feita', 'fiz', 'paguei', 'pago', 'paga', 'pagei', 'pronto',
+  'resolvi', 'resolvido', 'mandei', 'enviei', 'enviado', 'concluido',
+  'concluida', 'conclui', 'ok', 'done', 'quitado', 'quitei', 'terminei',
+]);
+
 function carregar() {
   try {
     return JSON.parse(fs.readFileSync(ARQUIVO, 'utf8'));
@@ -46,11 +53,8 @@ export function palavrasSignificativas(frase) {
   return normalizar(frase).split(' ').filter((w) => w.length >= 3 && !STOPWORDS.has(w));
 }
 
-function combina(mensagem, checkFrase) {
-  const alvo = palavrasSignificativas(checkFrase);
-  if (alvo.length === 0) return false;
-  const msg = new Set(normalizar(mensagem).split(' '));
-  return alvo.every((w) => msg.has(w));
+function temPalavraFeito(mensagem) {
+  return normalizar(mensagem).split(' ').some((w) => PALAVRAS_FEITO.has(w));
 }
 
 // clampa o dia ao último dia válido do mês de referência (ex.: dia 31 em fevereiro)
@@ -88,13 +92,12 @@ function proximoAlvo(diaDoMes, hoje = inicioDeHoje()) {
   return alvoDoMes(diaDoMes, ref);
 }
 
-export function criarRecorrente({ titulo, diaDoMes, checkFrase }) {
+export function criarRecorrente({ titulo, diaDoMes }) {
   const lista = carregar();
   const r = {
     id: Date.now().toString(36),
     titulo,
     diaDoMes,
-    checkFrase: checkFrase.trim(),
     ultimoCheckAlvo: null,
   };
   lista.push(r);
@@ -110,21 +113,37 @@ export function removerRecorrente(id) {
   salvar(carregar().filter((r) => r.id !== id));
 }
 
-// Tenta dar baixa: se a mensagem casa com a frase de check de algum lembrete,
-// marca o próximo alvo como quitado e retorna o lembrete. Senão retorna null.
+// Tenta dar baixa. A mensagem precisa de um verbo de conclusão
+// (paguei/feito/fiz/...) mais, se houver mais de um lembrete, uma palavra do
+// título para desambiguar. Retorna o lembrete quitado ou null.
 export function tentarCheck(mensagem) {
   const lista = carregar();
-  const r = lista.find((x) => combina(mensagem, x.checkFrase));
-  if (!r) return null;
-  r.ultimoCheckAlvo = isoDia(proximoAlvo(r.diaDoMes));
+  if (lista.length === 0 || !temPalavraFeito(mensagem)) return null;
+
+  const palavrasMsg = new Set(normalizar(mensagem).split(' '));
+  const porTitulo = lista.filter((r) =>
+    palavrasSignificativas(r.titulo).some((w) => palavrasMsg.has(w))
+  );
+
+  let alvo = null;
+  if (porTitulo.length === 1) {
+    alvo = porTitulo[0];
+  } else if (porTitulo.length === 0) {
+    // sem palavra do título: só dá baixa se houver exatamente um na janela ativa
+    const ativos = lista.filter((r) => cicloAtivo(r.diaDoMes));
+    if (ativos.length === 1) alvo = ativos[0];
+  }
+  if (!alvo) return null;
+
+  alvo.ultimoCheckAlvo = isoDia(proximoAlvo(alvo.diaDoMes));
   salvar(lista);
-  return r;
+  return alvo;
 }
 
 function montarMensagem(r, diasAte) {
   if (diasAte === 2) return `📌 Lembrete: faltam 2 dias para *${r.titulo}* (dia ${r.diaDoMes}).`;
   if (diasAte === 1) return `⏰ *${r.titulo}* é amanhã (dia ${r.diaDoMes}). Não esquece!`;
-  return `🚨 HOJE é dia de *${r.titulo}*!\nQuando fizer, me manda "${r.checkFrase}" que eu paro de avisar.`;
+  return `🚨 HOJE é dia de *${r.titulo}*!\nQuando fizer, me manda "paguei" ou "feito" que eu paro de avisar.`;
 }
 
 function horasDeEnvio(diasAte) {

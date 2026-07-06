@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { listarCalendarios, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
-import { conduzirConversa, temPendencia, dispararCheckDia } from './conversa.js';
+import { conduzirConversa, temPendencia, dispararCheckDia, iniciarRecorrente } from './conversa.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
 
 const fmtHora = new Intl.DateTimeFormat('pt-BR', {
@@ -34,11 +34,11 @@ Se houver mais de um parecido, mostro uma lista numerada — responda *1*, *2*..
 • _desmarca a reunião com o Lukas_
 
 🔁 *LEMBRETE MENSAL INSISTENTE*
-Para contas e tarefas fixas do mês:
-• _pagar o cartão dia 10 de todo mês, me avisa até eu mandar "paguei o cartão"_
-Aviso *2 dias antes* (1x), *1 dia antes* (2x) e *no dia* de hora em hora, até você mandar a frase de baixa.
-• *recorrentes* — lista os ativos
-• _remover recorrente 1_ — apaga um
+Para contas e tarefas fixas do mês. Escreva *mensal* (ou já mande completo):
+• _pagar cartão dia 10_
+Aviso *2 dias antes* (1x), *1 dia antes* (2x) e *no dia* de hora em hora.
+Para parar, é só mandar *"paguei"* ou *"feito cartão"*.
+• *recorrentes* — lista os ativos · _remover recorrente 1_ — apaga
 
 👀 *CONSULTAR* (responde na hora, sem confirmação)
 • *hoje* — agenda de hoje
@@ -86,6 +86,7 @@ export async function processarComando(texto, auth, origem = 'self') {
     }
 
     if (lower === 'start' || lower === 'manual' || lower === 'menu' || lower === 'ajuda' || lower === 'help') return MANUAL;
+    if (lower === 'mensal' || lower === 'lembrete mensal' || lower === 'novo mensal') return iniciarRecorrente(origem);
     if (lower === 'recorrentes' && origem === 'self') return listarRecorrentesMsg();
     if (lower.startsWith('remover recorrente') && origem === 'self') return removerRecorrenteMsg(msg);
     if (lower === 'hoje') return resumo('hoje', auth);
@@ -156,7 +157,7 @@ function listarRecorrentesMsg() {
   const lista = listarRecorrentes();
   if (lista.length === 0) return 'Nenhum lembrete recorrente ativo. Crie dizendo algo como: _pagar o cartão dia 10 de todo mês, me avisa até eu mandar "paguei"_.';
   const linhas = lista
-    .map((r, i) => `(${i + 1}) *${r.titulo}* — todo dia ${r.diaDoMes} · baixa: "${r.checkFrase}"`)
+    .map((r, i) => `(${i + 1}) *${r.titulo}* — todo dia ${r.diaDoMes}`)
     .join('\n');
   return `🔁 *Lembretes recorrentes:*\n${linhas}\n\nPara apagar: _remover recorrente 1_`;
 }
