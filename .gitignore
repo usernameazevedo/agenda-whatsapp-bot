@@ -1,0 +1,17 @@
+# dependências
+node_modules/
+
+# credenciais e sessões (NUNCA commitar)
+credentials.json
+token.json
+.wwebjs_auth/
+.wwebjs_cache/
+src/config.js
+
+# dados de runtime
+followups.json
+agenda.log
+qr.png
+
+# documentos pessoais
+RELATORIO.md

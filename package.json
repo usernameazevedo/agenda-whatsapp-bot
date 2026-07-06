@@ -1,0 +1,23 @@
+{
+  "name": "agenda-whatsapp",
+  "version": "1.0.0",
+  "description": "Resumos do Google Calendar via WhatsApp: semanal (segunda) e diário",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test:daily": "node src/index.js --now daily",
+    "test:weekly": "node src/index.js --now weekly"
+  },
+  "dependencies": {
+    "chrono-node": "^2.9.1",
+    "googleapis": "^140.0.0",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
+  },
+  "allowScripts": {
+    "puppeteer@24.38.0": true
+  }
+}
