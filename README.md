@@ -1,138 +1,161 @@
 # 📅 Agenda WhatsApp Bot
 
-**Seu Google Calendar dentro do WhatsApp** — um assistente pessoal de agenda que envia resumos automáticos, lembra você das reuniões e entende pedidos em português natural, como *"marca dentista quinta às 15h"* ou *"me lembra de mandar o orçamento amanhã"*.
+**🌎 English** · [🇧🇷 Português](README.pt-BR.md)
 
-Roda 24/7 em um Mac, Raspberry Pi ou VPS, usando o WhatsApp que você já tem — sem API Business da Meta, sem mensalidade.
+**Your Google Calendar inside WhatsApp** — a personal schedule assistant that sends automatic summaries, reminds you of meetings, and understands natural-language requests like *"book dentist Thursday at 3pm"* or *"remind me to send the quote tomorrow"*.
+
+Runs 24/7 on a Mac, Raspberry Pi, or VPS using the WhatsApp you already have — no Meta Business API, no monthly fee.
 
 ```
-Você:  marca reunião com o cliente amanhã às 15h
-Bot:   Marcar "Reunião com o cliente" — dom., 06/07 15:00 até 16:00. (S/N)
-Você:  S
-Bot:   ✅ Agendado: Reunião com o cliente — dom., 06/07 15:00
+You:  book a meeting with the client tomorrow at 3pm
+Bot:  Create "Meeting with the client" — Sun, 07/06 3:00pm to 4:00pm. (Y/N)
+You:  Y
+Bot:  ✅ Scheduled: Meeting with the client — Sun, 07/06 3:00pm
 ```
 
-## ✨ O que ele faz
+> The bot itself speaks Portuguese (it was built for a Brazilian user), but the code, docs, and prompts are easy to localize — see [Localization](#-localization).
 
-### Mensagens automáticas
-| Quando | O quê |
+## ✨ What it does
+
+### Automatic messages
+| When | What |
 |---|---|
-| Todo dia às 07:00 | Resumo da agenda do dia (horários, locais, links do Meet) |
-| Segunda às 07:00 | Resumo da semana agrupado por dia, com aniversários em destaque |
-| Todo dia às 21:00 | Prévia da agenda de amanhã |
-| 15 min antes de cada reunião | Lembrete com link do Meet pronto pra clicar |
-| Todo dia às 20:00 | **Checagem do dia**: pergunta lembrete a lembrete se foi feito — "N" posterga para amanhã automaticamente |
+| Every day at 07:00 | Summary of today's agenda (times, locations, Meet links) |
+| Monday at 07:00 | Week summary grouped by day, with birthdays highlighted |
+| Every day at 21:00 | Preview of tomorrow's agenda |
+| 15 min before each meeting | Reminder with the Meet link ready to tap |
+| Every day at 20:00 | **End-of-day check**: asks reminder by reminder if it was done — "N" auto-postpones to tomorrow |
 
-### Comandos em linguagem natural
-Fale como falaria com uma pessoa — a IA (Claude Haiku) interpreta:
+### Natural-language commands
+Talk like you would to a person — the AI (Claude Haiku) interprets:
 
-- **Marcar:** *"call com o fornecedor quinta 11h"*, *"me lembra de pagar o boleto amanhã"*
-- **Remarcar:** *"muda a gravação de quinta pra sexta de manhã"*
-- **Cancelar:** *"cancela o dentista"*
-- **Consultar:** *"o que tenho amanhã?"*, `hoje`, `semana`, `livre`
+- **Schedule:** *"call the supplier Thursday 11am"*, *"remind me to pay the bill tomorrow"*
+- **Reschedule:** *"move the recording from Thursday to Friday morning"*
+- **Cancel:** *"cancel the dentist"*
+- **Query:** *"what do I have tomorrow?"*, `today`, `week`, `free`
+- **Insistent monthly reminders:** *"pay card day 10"* → escalating nudges (see below)
 
-### O fluxo que evita desastres
-O bot **nunca altera a agenda sem confirmação**:
+### The flow that prevents disasters
+The bot **never changes your calendar without confirmation**:
 
-1. **Coleta o que falta** — sem hora? Ele pergunta. Sem fim? Assume 1h.
-2. **Desambigua** — dois eventos parecidos? Lista numerada, você escolhe.
-3. **Detecta conflito de nome** — já existe "Reunião Lukas"? Pergunta: (1) marcar novo, (2) alterar o existente, (3) cancelar.
-4. **Avisa dia sobrecarregado** — mais de 6h de compromissos no dia? Avisa antes do S/N.
-5. **Só executa com "S"** — e "N" descarta tudo.
+1. **Collects what's missing** — no time? It asks. No end? Assumes 1h.
+2. **Disambiguates** — two similar events? Numbered list, you pick.
+3. **Detects name conflicts** — "Meeting Lukas" already exists? Asks: (1) create new, (2) edit existing, (3) cancel.
+4. **Warns about overloaded days** — more than 6h of commitments? Warns before the Y/N.
+5. **Only executes on "Y"** — and "N" discards everything.
+
+### Insistent monthly reminders
+For fixed monthly bills and tasks. Create in one line — *"pay card day 10"* — and the bot nags with escalating intensity until you mark it done:
+
+- **2 days before:** once a day
+- **1 day before:** twice a day
+- **On the day:** every hour (8am–10pm)
+
+To stop, just send anything with a completion verb + a keyword: *"paid the card"*, *"done card"*. No exact phrase to memorize.
 
 ### Extras
-- 💰 **Follow-up de orçamento:** ao marcar "enviar orçamento X", ele oferece cobrar retorno em N dias — e no dia, pergunta se houve resposta; sem resposta, cria lembrete de cobrança e sugere um texto pronto
-- 👩‍💼 **Modo secretária:** um segundo número autorizado pode marcar/alterar na sua agenda (você recebe aviso de cada ação)
-- 🛡️ **Watchdog de autocura:** se travar ou desconectar, reinicia sozinho com limpeza de processos órfãos
-- 🔔 Notificações nativas do macOS quando algo precisa de você (sessão expirada, falha no Google)
+- 💰 **Quote follow-up:** when you schedule "send quote X", it offers to chase the reply in N days — and on the day, asks if there was a response; if not, creates a follow-up reminder and drafts a message for you
+- 👩‍💼 **Secretary mode:** a second authorized number can schedule/edit your calendar (you get notified of every action)
+- 🛡️ **Self-healing watchdog:** if it hangs or disconnects, it restarts itself, cleaning up orphaned processes
+- 🔔 Native macOS notifications when something needs you (session expired, Google failure)
 
 ## 🧱 Stack
 
-| Camada | Tecnologia |
+| Layer | Technology |
 |---|---|
-| WhatsApp | [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js) (WhatsApp Web via Chrome headless) |
-| Calendário | Google Calendar API oficial (OAuth 2.0) |
-| Interpretação de frases | [Claude Haiku](https://www.anthropic.com/claude) (~US$ 0,001/mensagem; resumos automáticos não usam IA) |
-| Datas em PT-BR | chrono-node |
-| Agendador | node-cron |
-| Processo | pm2 (auto-restart + boot) |
+| WhatsApp | [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js) (WhatsApp Web via headless Chrome) |
+| Calendar | Official Google Calendar API (OAuth 2.0) |
+| Sentence parsing | [Claude Haiku](https://www.anthropic.com/claude) (~US$0.001/message; automatic summaries don't use AI) |
+| Date parsing | chrono-node |
+| Scheduler | node-cron |
+| Process | pm2 (auto-restart + boot) |
 
-## 🚀 Instalação
+## 🚀 Installation
 
-### Pré-requisitos
-- Node.js 18+ e Google Chrome instalados
-- Conta Google e uma chave da [API da Anthropic](https://console.anthropic.com/) (opcional — sem ela, só os comandos fixos funcionam)
+### Prerequisites
+- Node.js 18+ and Google Chrome installed
+- A Google account and an [Anthropic API key](https://console.anthropic.com/) (optional — without it, only the fixed commands work)
 
-### 1. Clone e instale
+### 1. Clone and install
 
 ```bash
-git clone https://github.com/SEU_USUARIO/agenda-whatsapp.git
-cd agenda-whatsapp
+git clone https://github.com/YOUR_USERNAME/agenda-whatsapp-bot.git
+cd agenda-whatsapp-bot
 npm install
 cp src/config.example.js src/config.js
-# edite src/config.js com seu número
+# edit src/config.js with your number
 ```
 
-### 2. Credenciais do Google Calendar
+### 2. Google Calendar credentials
 
-1. Em [console.cloud.google.com](https://console.cloud.google.com/), crie um projeto e ative a **Google Calendar API**
-2. Configure a **Tela de permissão OAuth** (tipo Externo) e adicione seu e-mail como **usuário de teste**
-3. Crie um **ID do cliente OAuth** do tipo *App para computador* e baixe o JSON como `credentials.json` na raiz do projeto
+1. At [console.cloud.google.com](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**
+2. Configure the **OAuth consent screen** (External type) and add your email as a **test user**
+3. Create an **OAuth client ID** of type *Desktop app* and download the JSON as `credentials.json` in the project root
 
-### 3. Primeira execução
+### 3. First run
 
 ```bash
 npm run test:daily
 ```
 
-- O navegador abre para você autorizar o Google (um clique)
-- Um QR code aparece (também salvo em `qr.png`) — escaneie em *WhatsApp → Aparelhos conectados*
-- Você recebe o resumo do dia de teste no seu WhatsApp 🎉
+- Your browser opens to authorize Google (one click)
+- A QR code appears (also saved to `qr.png`) — scan it in *WhatsApp → Linked devices*
+- You receive the test daily summary on your WhatsApp 🎉
 
-### 4. Rodar para sempre
+### 4. Run forever
 
 ```bash
 npm install -g pm2
 ANTHROPIC_API_KEY=sk-ant-... pm2 start ./start.sh --name agenda-whatsapp --interpreter bash
 pm2 save
-pm2 startup   # siga a instrução exibida para iniciar no boot
+pm2 startup   # follow the printed instruction to start on boot
 ```
 
-> **macOS:** edite o plist gerado pelo `pm2 startup` trocando `/bin/sh -c` por `/bin/zsh -l -c` — sem shell de login, o Chrome trava na inicialização (aprendemos isso do jeito difícil, veja abaixo).
+> **macOS:** edit the plist generated by `pm2 startup`, swapping `/bin/sh -c` for `/bin/zsh -l -c` — without a login shell, Chrome hangs on startup (we learned this the hard way, see below).
 
-## 🔥 Lições aprendidas (para você não sofrer)
+## 🔥 Lessons learned (so you don't suffer)
 
-Este projeto passou por uma jornada de depuração real. Os pepinos e as soluções:
+This project went through a real debugging journey. The headaches and fixes:
 
-1. **QR rejeitado ("não é possível conectar novos aparelhos")** → `whatsapp-web.js` desatualizado. Sempre use `@latest`.
-2. **Suas mensagens ignoradas pelo bot** → o WhatsApp migrou chats para o formato `@lid`; o ID do seu chat pode não ser `seunumero@c.us`. O log mostra o ID real — adicione em `chatsExtras`.
-3. **"Execution context was destroyed" em loop** → reinícios abruptos deixam processos Chrome órfãos travando o perfil. Soluções incluídas: desligamento gracioso (SIGTERM → `destroy()`) e `start.sh` que limpa órfãos e locks antes de cada início.
-4. **Trava no boot (processo "online" mas nunca conecta)** → o pm2 iniciado pelo sistema herda ambiente mínimo e o Chrome não sobe. Solução: shell de login no plist/systemd + delay de 20s.
-5. **Fluxo OAuth de "colar código" não existe mais** → o Google exige redirect; este projeto sobe um servidor local em `localhost:3535` que captura a autorização sozinho.
-6. **Tudo isso agora é auto-recuperável** → o watchdog interno detecta travamento/desconexão e força um renascimento limpo via pm2.
+1. **QR rejected ("can't link new devices")** → outdated `whatsapp-web.js`. Always use `@latest`.
+2. **Bot ignores your messages** → WhatsApp migrated chats to the `@lid` format; your chat ID may not be `yournumber@c.us`. The log shows the real ID — add it to `chatsExtras`.
+3. **"Execution context was destroyed" loop** → abrupt restarts leave orphaned Chrome processes locking the profile. Fixes included: graceful shutdown (SIGTERM → `destroy()`) and a `start.sh` that clears orphans and locks before each start.
+4. **Hangs on boot (process "online" but never connects)** → pm2 launched by the system inherits a minimal environment and Chrome won't come up. Fix: login shell in the plist/systemd + a 20s delay.
+5. **The "paste the code" OAuth flow is gone** → Google requires a redirect; this project spins up a local server at `localhost:3535` that captures the authorization itself.
+6. **All of this is now self-recoverable** → the internal watchdog detects hangs/disconnects and forces a clean rebirth via pm2.
 
-## ⚙️ Configuração
+## ⚙️ Configuration
 
-Tudo em `src/config.js`: horários dos resumos (cron), antecedência dos lembretes, limite de horas do dia, número da secretária, calendários incluídos. Variáveis de ambiente: `ANTHROPIC_API_KEY`, `WHATSAPP_TO`, `DAILY_HOURS_LIMIT`.
+Everything in `src/config.js`: summary times (cron), reminder lead time, daily hours limit, secretary number, included calendars. Environment variables: `ANTHROPIC_API_KEY`, `WHATSAPP_TO`, `DAILY_HOURS_LIMIT`.
+
+## 🌐 Localization
+
+The bot's replies and the AI prompt are in Portuguese. To adapt to another language:
+- **Bot replies:** `src/comandos.js`, `src/conversa.js`, `src/formatar.js`, `src/recorrentes.js`
+- **AI interpretation:** the `SYSTEM` prompt in `src/ia.js`
+- **Completion verbs** (for marking monthly reminders done): `PALAVRAS_FEITO` in `src/recorrentes.js`
+
+PRs adding an i18n layer are welcome.
 
 ## 🗺️ Roadmap
 
-- [ ] Conflito de horário sobreposto com opções (marcar assim mesmo / mudar / cancelar o outro)
-- [ ] "Livre" para qualquer dia (*"tenho horário quinta de tarde?"*)
-- [ ] Responder convites de reunião (aceitar/recusar) pelo WhatsApp
-- [ ] Horários livres em comum entre várias pessoas
-- [ ] Eventos recorrentes (com escopo "só essa / toda a série")
-- [ ] Comandos por áudio (transcrição)
-- [ ] Guia de deploy em Raspberry Pi / VPS
+- [ ] Overlapping time conflict with options (book anyway / move / cancel the other)
+- [ ] "Free" for any day (*"am I free Thursday afternoon?"*)
+- [ ] Respond to meeting invites (accept/decline) via WhatsApp
+- [ ] Common free slots across multiple people
+- [ ] Recurring calendar events (with "this one / whole series" scope)
+- [ ] Voice commands (transcription)
+- [ ] Raspberry Pi / VPS deploy guide
 
-## ⚠️ Avisos
+## ⚠️ Disclaimers
 
-- `whatsapp-web.js` automatiza o WhatsApp Web e **não é oficial** — para uso pessoal de baixo volume é o padrão da comunidade, mas a Meta pode mudar as regras. A alternativa oficial é a WhatsApp Business Cloud API.
-- Nunca commite `credentials.json`, `token.json`, `src/config.js` nem `.wwebjs_auth/` (o `.gitignore` já cuida disso).
+- `whatsapp-web.js` automates WhatsApp Web and is **unofficial** — for low-volume personal use it's the community standard, but Meta can change the rules. The official alternative is the WhatsApp Business Cloud API.
+- Never commit `credentials.json`, `token.json`, `src/config.js`, or `.wwebjs_auth/` (the `.gitignore` already handles this).
 
-## 📄 Licença
+## 📄 License
 
-MIT — use, modifique e compartilhe à vontade.
+MIT — use, modify, and share freely.
 
 ---
 
-*Construído em par com o [Claude Code](https://claude.com/claude-code) numa sessão de vibe coding que incluiu 10 bugs de produção resolvidos ao vivo.* 🤝
+*Built pair-programming with [Claude Code](https://claude.com/claude-code) in a vibe-coding session that included 10 production bugs solved live.* 🤝
