@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { listarCalendarios, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
-import { conduzirConversa, temPendencia, dispararCheckDia, iniciarRecorrente } from './conversa.js';
+import { conduzirConversa, temPendencia, dispararCheckDia, dispararFollowupReunioes, iniciarRecorrente } from './conversa.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
 import { t, fmtHora, CMD } from './i18n.js';
 
@@ -39,6 +39,9 @@ export async function processarComando(texto, auth, origem = 'self') {
     if (emCmd(lower, 'agendas')) return listarAgendas(auth);
     if (emCmd(lower, 'checagem') && origem === 'self') {
       return (await dispararCheckDia(auth)) ?? t('checkdia.none');
+    }
+    if (emCmd(lower, 'reunioes') && origem === 'self') {
+      return (await dispararFollowupReunioes(auth)) ?? t('reu.none');
     }
   }
 

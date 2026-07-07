@@ -46,6 +46,7 @@ export const CMD = {
   livre: ['livre', 'livre?', 'free', 'free?'],
   agendas: ['agendas', 'calendars'],
   checagem: ['checagem', 'check'],
+  reunioes: ['reuniões', 'reunioes', 'meetings'],
 };
 
 const DICT = {
@@ -127,6 +128,19 @@ const DICT = {
     'rec.remove.bad': 'Número inválido. Manda *recorrentes* para ver a lista.',
     'rec.removed': '✅ Removido: *{title}* (todo dia {day}).',
 
+    // follow-up de reuniões (fim do dia)
+    'reu.entrega': '📋 Reunião "{title}": ficou algo pra entregar? (1) sim (2) não',
+    'reu.tipo': 'O que ficou? (1) orçamento (2) marcar fotógrafo/filmmaker (3) outros',
+    'reu.outros': 'Escreve o que foi:',
+    'reu.ask12': 'Responde 1 (sim) ou 2 (não).',
+    'reu.ask123': 'Responde 1, 2 ou 3.',
+    'reu.created': '✅ Anotei "{task}" para {day}.',
+    'reu.finished': 'Follow-up das reuniões concluído. ✅',
+    'reu.none': 'Nenhuma reunião hoje. ✅',
+    'reu.task.orcamento': 'Orçamento — {meeting}',
+    'reu.task.foto': 'Marcar fotógrafo/filmmaker — {meeting}',
+    'reu.task.outros': '{text} — {meeting}',
+
     // checagem de fim de dia
     'checkdia.start': 'Checagem do dia ({n} lembrete{s}):\n"{title}" foi feito? (S/N — N posterga para amanhã)',
     'checkdia.markeddone': '✅ "{title}" marcado como feito.',
@@ -178,9 +192,9 @@ Para parar: mande *"paguei"* ou *"feito cartão"*.
 👀 *CONSULTAR* (sem confirmação)
 • *hoje* · *amanhã* · *semana* · *livre*
 
-⚙️ *AUTOMÁTICO*: resumo às 07:00, semana seg 07:00, prévia 21:00, lembrete 15min antes, checagem 20:00.
+⚙️ *AUTOMÁTICO*: resumo 07:00, semana seg 07:00, follow-up de reuniões 19:00, checagem 20:00, prévia 21:00, lembrete 15min antes.
 
-🔧 *OUTROS*: *checagem* · *agendas* · *start* (este manual)
+🔧 *OUTROS*: *reuniões* · *checagem* · *agendas* · *start* (este manual)
 
 Dica: nas confirmações, responda só *S* ou *N*. 😉`,
   },
@@ -255,6 +269,19 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
     'rec.remove.bad': 'Invalid number. Send *recurring* to see the list.',
     'rec.removed': '✅ Removed: *{title}* (every day {day}).',
 
+    // meeting follow-up (end of day)
+    'reu.entrega': '📋 Meeting "{title}": anything to deliver afterwards? (1) yes (2) no',
+    'reu.tipo': 'What was it? (1) quote (2) book photographer/filmmaker (3) other',
+    'reu.outros': 'Type what it was:',
+    'reu.ask12': 'Reply 1 (yes) or 2 (no).',
+    'reu.ask123': 'Reply 1, 2 or 3.',
+    'reu.created': '✅ Noted "{task}" for {day}.',
+    'reu.finished': 'Meeting follow-up complete. ✅',
+    'reu.none': 'No meetings today. ✅',
+    'reu.task.orcamento': 'Quote — {meeting}',
+    'reu.task.foto': 'Book photographer/filmmaker — {meeting}',
+    'reu.task.outros': '{text} — {meeting}',
+
     'checkdia.start': "End-of-day check ({n} reminder{s}):\nWas \"{title}\" done? (Y/N — N moves it to tomorrow)",
     'checkdia.markeddone': '✅ "{title}" marked as done.',
     'checkdia.postponed': '✅ "{title}" moved to {when}.',
@@ -303,9 +330,9 @@ To stop: send *"paid"* or *"done card"*.
 👀 *QUERY* (no confirmation)
 • *today* · *tomorrow* · *week* · *free*
 
-⚙️ *AUTOMATIC*: summary at 7am, week Mon 7am, preview 9pm, reminder 15min before, check 8pm.
+⚙️ *AUTOMATIC*: summary 7am, week Mon 7am, meeting follow-up 7pm, check 8pm, preview 9pm, reminder 15min before.
 
-🔧 *OTHER*: *check* · *calendars* · *start* (this manual)
+🔧 *OTHER*: *meetings* · *check* · *calendars* · *start* (this manual)
 
 Tip: on confirmations, just reply *Y* or *N*. 😉`,
   },

@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { getAuthClient, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { processarComando } from './comandos.js';
-import { dispararCobrancas, dispararCheckDia } from './conversa.js';
+import { dispararCobrancas, dispararCheckDia, dispararFollowupReunioes } from './conversa.js';
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
@@ -162,6 +162,10 @@ async function main() {
     cron.schedule(CONFIG.cronNoturno, () => comSaude(() => executarNoturno(auth)), opts);
     cron.schedule('* * * * *', () => comSaude(() => verificarLembretes(auth, enviarMensagem)), opts);
     cron.schedule(CONFIG.cronFollowup, () => comSaude(() => dispararCobrancas(enviarMensagem)), opts);
+    cron.schedule(CONFIG.cronReunioes, () => comSaude(async () => {
+      const pergunta = await dispararFollowupReunioes(auth);
+      if (pergunta) await enviarMensagem(pergunta);
+    }), opts);
     cron.schedule(CONFIG.cronCheckDia, () => comSaude(async () => {
       const pergunta = await dispararCheckDia(auth);
       if (pergunta) await enviarMensagem(pergunta);

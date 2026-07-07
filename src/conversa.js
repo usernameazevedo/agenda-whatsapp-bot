@@ -29,7 +29,8 @@ function limparExpiradas() {
   const agora = Date.now();
   for (const [k, v] of pendencias) {
     // perguntas de follow-up podem esperar o dia todo; o resto expira rápido
-    const ttlMin = v.fase?.startsWith('followup') || v.fase === 'checkdia' ? 12 * 60 : PENDENCIA_TTL_MIN;
+    const longa = v.fase?.startsWith('followup') || v.fase?.startsWith('reu_') || v.fase === 'checkdia';
+    const ttlMin = longa ? 12 * 60 : PENDENCIA_TTL_MIN;
     if (agora - v.criadoEm > ttlMin * 60 * 1000) pendencias.delete(k);
   }
 }
@@ -83,6 +84,9 @@ async function responderPendencia(texto, pend, auth, key) {
   if (pend.fase === 'checkdia') return responderCheckDia(texto, pend, auth, key);
   if (pend.fase === 'rec_slots') return responderRecSlots(texto, pend, key);
   if (pend.fase === 'rec_confirma') return responderRecConfirma(texto, pend, key);
+  if (pend.fase === 'reu_entrega') return responderReuEntrega(texto, pend, auth, key);
+  if (pend.fase === 'reu_tipo') return responderReuTipo(texto, pend, auth, key);
+  if (pend.fase === 'reu_outros') return responderReuOutros(texto, pend, auth, key);
 
   if (ehNao(texto)) {
     pendencias.delete(key);
@@ -372,6 +376,96 @@ function responderRecConfirma(texto, pend, key) {
     return t('rec.created', { title: d.titulo, day: d.diaDoMes });
   }
   return t('rec.ask.confirm');
+}
+
+// ─── follow-up de reuniões (fim do dia) ──────────────────────────────────────
+
+// eventos com horário que não são tarefas do bot nem claramente pessoais
+const PALAVRAS_PESSOAL = /almo[çc]o|jantar|anivers|m[ée]dico|dentista|academia|treino|folga|lunch|dinner|birthday|doctor|dentist|gym|workout|personal/i;
+const ehReuniao = (e) =>
+  Boolean(e.start?.dateTime) &&
+  e.extendedProperties?.private?.agendaBot !== 'lembrete' &&
+  !(e.summary ?? '').startsWith('✅') &&
+  !PALAVRAS_PESSOAL.test(e.summary ?? '');
+
+// próximo dia útil a partir de hoje (pula sábado e domingo → segunda)
+function proximoDiaUtil() {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+// cria a tarefa da entrega no próximo dia útil (como lembrete, entra na checagem)
+async function criarEntrega(auth, titulo) {
+  const inicio = proximoDiaUtil();
+  const fim = new Date(inicio.getTime() + 30 * 60 * 1000);
+  await criarEvento(auth, { titulo, inicio, fim, lembrete: true });
+  return { titulo, dia: fmtDia.format(inicio) };
+}
+
+// Monta a fila de reuniões do dia; retorna a primeira pergunta ou null.
+export async function dispararFollowupReunioes(auth) {
+  limparExpiradas();
+  if (pendencias.has(DEFAULT_KEY)) return null;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const amanha = new Date(hoje.getTime() + 24 * 60 * 60 * 1000);
+  const fila = (await listarEventos(auth, hoje, amanha)).filter(ehReuniao);
+  if (fila.length === 0) return null;
+  pendencias.set(DEFAULT_KEY, { fase: 'reu_entrega', fila, idx: 0, criadoEm: Date.now() });
+  return t('reu.entrega', { title: fila[0].summary });
+}
+
+// avança para a próxima reunião da fila (ou encerra)
+function proximaReuniao(pend, key, prefixo = '') {
+  pend.idx += 1;
+  if (pend.idx >= pend.fila.length) {
+    pendencias.delete(key);
+    return prefixo + t('reu.finished');
+  }
+  pend.fase = 'reu_entrega';
+  pend.criadoEm = Date.now();
+  pendencias.set(key, pend);
+  return prefixo + t('reu.entrega', { title: pend.fila[pend.idx].summary });
+}
+
+function responderReuEntrega(texto, pend, auth, key) {
+  const op = texto.trim().match(/^([12])/)?.[1] ?? (ehSim(texto) ? '1' : ehNao(texto) ? '2' : null);
+  if (op === '2') return proximaReuniao(pend, key);
+  if (op === '1') {
+    pend.fase = 'reu_tipo';
+    pend.criadoEm = Date.now();
+    pendencias.set(key, pend);
+    return t('reu.tipo');
+  }
+  return t('reu.ask12');
+}
+
+async function responderReuTipo(texto, pend, auth, key) {
+  const op = texto.trim().match(/^([123])/)?.[1];
+  const reuniao = pend.fila[pend.idx].summary;
+  if (op === '1') {
+    const { titulo, dia } = await criarEntrega(auth, t('reu.task.orcamento', { meeting: reuniao }));
+    return proximaReuniao(pend, key, t('reu.created', { task: titulo, day: dia }) + '\n\n');
+  }
+  if (op === '2') {
+    const { titulo, dia } = await criarEntrega(auth, t('reu.task.foto', { meeting: reuniao }));
+    return proximaReuniao(pend, key, t('reu.created', { task: titulo, day: dia }) + '\n\n');
+  }
+  if (op === '3') {
+    pend.fase = 'reu_outros';
+    pend.criadoEm = Date.now();
+    pendencias.set(key, pend);
+    return t('reu.outros');
+  }
+  return t('reu.ask123');
+}
+
+async function responderReuOutros(texto, pend, auth, key) {
+  const reuniao = pend.fila[pend.idx].summary;
+  const { titulo, dia } = await criarEntrega(auth, t('reu.task.outros', { text: texto.trim(), meeting: reuniao }));
+  return proximaReuniao(pend, key, t('reu.created', { task: titulo, day: dia }) + '\n\n');
 }
 
 // ─── checagem de fim de dia dos lembretes ────────────────────────────────────
