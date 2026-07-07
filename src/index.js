@@ -9,6 +9,7 @@ import { dispararCobrancas, dispararCheckDia } from './conversa.js';
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
+import { t } from './i18n.js';
 
 const { Client, LocalAuth } = pkg;
 
@@ -32,7 +33,7 @@ whatsapp.on('qr', async (qr) => {
   } catch (err) {
     console.error('Falha ao salvar qr.png:', err.message);
   }
-  notificarMac('Agenda WhatsApp', 'Sessão expirou — precisa escanear o QR de novo (qr.png na pasta do projeto).');
+  notificarMac('Agenda WhatsApp', t('notif.qr'));
 });
 
 // hora atual (0-23) no fuso configurado
@@ -88,7 +89,7 @@ async function executarSemanal(auth) {
 async function executarNoturno(auth) {
   const amanha = inicioDoDia(new Date(), 1);
   const eventos = await listarEventos(auth, amanha, inicioDoDia(new Date(), 2));
-  await enviarMensagem(resumoDiario(eventos, amanha, '🌙 *Prévia de amanhã*'));
+  await enviarMensagem(resumoDiario(eventos, amanha, t('daily.title.preview')));
 }
 
 // ─── watchdog de autocura ────────────────────────────────────────────────────
@@ -105,7 +106,7 @@ let aguardandoQr = false; // sessão expirada: precisa de ação humana, reinici
 
 async function reiniciarLimpo(motivo) {
   console.error(`[watchdog] ${motivo} — reiniciando para recuperar.`);
-  notificarMac('Agenda WhatsApp', `Auto-recuperação: ${motivo}`);
+  notificarMac('Agenda WhatsApp', t('notif.recover', { r: motivo }));
   try {
     await whatsapp.destroy();
   } catch {}
@@ -208,14 +209,14 @@ async function main() {
           await enviarPara(chat.id._serialized, resposta);
           // avisa o dono quando a secretária conclui uma ação na agenda
           if (origem !== 'self' && resposta.startsWith('✅')) {
-            await enviarMensagem(`Secretária: ${resposta.split('\n')[0]}`);
+            await enviarMensagem(t('secretary.notice', { msg: resposta.split('\n')[0] }));
           }
         }
       } catch (err) {
         console.error('Erro ao processar comando:', err.message);
         try {
           const chat = await msg.getChat();
-          await enviarPara(chat.id._serialized, `❌ Deu erro ao executar: ${err.message}. Tenta de novo ou reformula.`);
+          await enviarPara(chat.id._serialized, t('err.exec', { err: err.message }));
         } catch {}
       }
     });
@@ -224,7 +225,7 @@ async function main() {
 
   whatsapp.on('auth_failure', (msg) => {
     console.error('Falha de autenticação no WhatsApp:', msg);
-    notificarMac('Agenda WhatsApp', 'Falha de autenticação no WhatsApp — verifique o agenda.log.');
+    notificarMac('Agenda WhatsApp', t('notif.authfail'));
   });
   // camada 3: desconexão explícita → reinício limpo imediato
   whatsapp.on('disconnected', (reason) => {

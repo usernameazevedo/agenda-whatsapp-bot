@@ -1,16 +1,4 @@
-import { CONFIG } from './config.js';
-
-const fmtHora = new Intl.DateTimeFormat('pt-BR', {
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: CONFIG.timezone,
-});
-const fmtDiaSemana = new Intl.DateTimeFormat('pt-BR', {
-  weekday: 'long',
-  day: '2-digit',
-  month: '2-digit',
-  timeZone: CONFIG.timezone,
-});
+import { t, fmtHora, fmtDiaSemana, cap } from './i18n.js';
 
 export function linkDoEvento(evento) {
   return (
@@ -25,9 +13,9 @@ function isAniversario(evento) {
 }
 
 function linhaEvento(evento) {
-  const titulo = evento.summary ?? '(sem título)';
+  const titulo = evento.summary ?? t('event.untitled');
   if (isAniversario(evento)) return `• 🎂 ${titulo}`;
-  if (evento.start?.date) return `• 📌 ${titulo} (dia inteiro)`;
+  if (evento.start?.date) return `• 📌 ${titulo} ${t('event.allday')}`;
   const inicio = fmtHora.format(new Date(evento.start.dateTime));
   const fim = evento.end?.dateTime ? fmtHora.format(new Date(evento.end.dateTime)) : '';
   const local = evento.location ? `\n   📍 ${evento.location}` : '';
@@ -36,19 +24,17 @@ function linhaEvento(evento) {
   return `• 🕐 ${inicio}${fim ? `–${fim}` : ''} ${titulo}${local}${link}`;
 }
 
-export function resumoDiario(eventos, data, titulo = '☀️ *Bom dia! Sua agenda de hoje*') {
+export function resumoDiario(eventos, data, titulo = t('daily.title.morning')) {
   const dia = fmtDiaSemana.format(data);
   if (eventos.length === 0) {
-    return `${titulo} (${dia}): agenda livre, nenhum compromisso. 🎉`;
+    return t('daily.empty', { title: titulo, day: dia });
   }
   const linhas = eventos.map(linhaEvento).join('\n');
-  return `${titulo} (${dia}):\n\n${linhas}\n\nTotal: ${eventos.length} compromisso(s).`;
+  return `${titulo} (${dia}):\n\n${linhas}\n\n${t('daily.total', { n: eventos.length })}`;
 }
 
 export function resumoSemanal(eventos, inicioSemana) {
-  if (eventos.length === 0) {
-    return '🗓️ *Resumo da semana*\n\nSemana livre, nenhum compromisso agendado. 🎉';
-  }
+  if (eventos.length === 0) return t('week.empty');
   const aniversarios = eventos.filter(isAniversario);
   const demais = eventos.filter((e) => !isAniversario(e));
 
@@ -60,10 +46,10 @@ export function resumoSemanal(eventos, inicioSemana) {
     porDia.get(chave).push(linhaEvento(evento));
   }
   const blocos = [...porDia.entries()]
-    .map(([dia, linhas]) => `*${dia.charAt(0).toUpperCase() + dia.slice(1)}*\n${linhas.join('\n')}`)
+    .map(([dia, linhas]) => `*${cap(dia)}*\n${linhas.join('\n')}`)
     .join('\n\n');
 
-  let msg = `🗓️ *Resumo da semana* (${eventos.length} compromissos):\n\n${blocos}`;
+  let msg = `${t('week.title', { n: eventos.length })}\n\n${blocos}`;
   if (aniversarios.length > 0) {
     const linhas = aniversarios
       .map((e) => {
@@ -71,15 +57,21 @@ export function resumoSemanal(eventos, inicioSemana) {
         return `• 🎂 ${e.summary} — ${fmtDiaSemana.format(data)}`;
       })
       .join('\n');
-    msg += `\n\n*🎉 Aniversários da semana:*\n${linhas}`;
+    msg += `\n\n${t('week.birthdays')}\n${linhas}`;
   }
   return msg;
 }
 
 export function mensagemLembrete(evento, minutos) {
-  const titulo = evento.summary ?? '(sem título)';
+  const titulo = evento.summary ?? t('event.untitled');
   const local = evento.location ? `\n📍 ${evento.location}` : '';
   const meet = linkDoEvento(evento);
-  const link = meet ? `\n📹 Entrar: ${meet}` : '';
-  return `🔔 *${titulo}* em ${minutos} min (${fmtHora.format(new Date(evento.start.dateTime))})${local}${link}`;
+  const link = meet ? `\n📹 ${t('reminder.join')}${meet}` : '';
+  return t('reminder.in', {
+    title: titulo,
+    min: minutos,
+    time: fmtHora.format(new Date(evento.start.dateTime)),
+    loc: local,
+    link,
+  });
 }

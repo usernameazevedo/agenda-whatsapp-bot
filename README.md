@@ -13,7 +13,7 @@ You:  Y
 Bot:  ✅ Scheduled: Meeting with the client — Sun, 07/06 3:00pm
 ```
 
-> The bot itself speaks Portuguese (it was built for a Brazilian user), but the code, docs, and prompts are easy to localize — see [Localization](#-localization).
+> **The bot speaks English or Portuguese** — set `idioma: 'en'` (or `'pt-BR'`) in `src/config.js`, or the `BOT_LANG` env var. See [Language](#-language).
 
 ## ✨ What it does
 
@@ -128,14 +128,17 @@ This project went through a real debugging journey. The headaches and fixes:
 
 Everything in `src/config.js`: summary times (cron), reminder lead time, daily hours limit, secretary number, included calendars. Environment variables: `ANTHROPIC_API_KEY`, `WHATSAPP_TO`, `DAILY_HOURS_LIMIT`.
 
-## 🌐 Localization
+## 🌐 Language
 
-The bot's replies and the AI prompt are in Portuguese. To adapt to another language:
-- **Bot replies:** `src/comandos.js`, `src/conversa.js`, `src/formatar.js`, `src/recorrentes.js`
-- **AI interpretation:** the `SYSTEM` prompt in `src/ia.js`
-- **Completion verbs** (for marking monthly reminders done): `PALAVRAS_FEITO` in `src/recorrentes.js`
+The bot ships with **English and Portuguese**. Pick one in `src/config.js`:
 
-PRs adding an i18n layer are welcome.
+```js
+idioma: 'en',      // or 'pt-BR'
+```
+
+Or via environment: `BOT_LANG=en`. This switches every reply, the manual, date/time formatting (12h vs 24h), the Y/N ↔ S/N confirmations, and the AI's interpretation prompt.
+
+**Adding another language:** all strings live in one file — `src/i18n.js`. Copy the `'en'` block, translate the values, add your locale to the `DICT`, and extend `PALAVRAS_FEITO` (completion verbs) and `CMD` (command keywords). PRs welcome.
 
 ## 🗺️ Roadmap
 

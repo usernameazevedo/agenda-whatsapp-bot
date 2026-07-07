@@ -3,6 +3,9 @@ export const CONFIG = {
   // Número que vai RECEBER as mensagens (código do país + DDD + número)
   destinatario: process.env.WHATSAPP_TO ?? '5511999998888',
 
+  // Idioma do bot / bot language: 'pt-BR' ou 'en'
+  idioma: process.env.BOT_LANG ?? 'pt-BR',
+
   // Fuso horário dos agendamentos
   timezone: 'America/Sao_Paulo',
 

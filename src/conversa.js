@@ -12,40 +12,18 @@ import {
 import { interpretar, gerarTexto } from './ia.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
 import { criarRecorrente } from './recorrentes.js';
+import { t, fmtDataHora, fmtHora, fmtDia, ehSim, ehNao } from './i18n.js';
 
 const PENDENCIA_TTL_MIN = 10;
 const DURACAO_PADRAO_MIN = 60;
-const REGEX_ORCAMENTO = /or[çc]ament|proposta/i;
+const REGEX_ORCAMENTO = /or[çc]ament|proposta|quote|proposal/i;
 
 // usuário único: uma pendência global cobre qualquer formato de chat (@c.us / @lid)
 const DEFAULT_KEY = 'self';
 const pendencias = new Map();
 
-const fmtDataHora = new Intl.DateTimeFormat('pt-BR', {
-  weekday: 'short',
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: CONFIG.timezone,
-});
-const fmtHora = new Intl.DateTimeFormat('pt-BR', {
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: CONFIG.timezone,
-});
-const fmtDia = new Intl.DateTimeFormat('pt-BR', {
-  weekday: 'long',
-  day: '2-digit',
-  month: '2-digit',
-  timeZone: CONFIG.timezone,
-});
-
 const dataDoEvento = (e) => new Date(e.start?.dateTime ?? `${e.start?.date}T12:00:00`);
 const linhaCandidato = (e, i) => `(${i + 1}) ${e.summary} — ${fmtDataHora.format(dataDoEvento(e))}`;
-
-const ehSim = (t) => /^(s|sim|pode|ok|isso|confirmo|confirmar)\b/i.test(t.trim());
-const ehNao = (t) => /^(n|n[ãa]o|deixa|cancela)\b/i.test(t.trim());
 
 function limparExpiradas() {
   const agora = Date.now();
@@ -108,10 +86,8 @@ async function responderPendencia(texto, pend, auth, key) {
 
   if (ehNao(texto)) {
     pendencias.delete(key);
-    if (pend.fase === 'confirma' && pend.sobrecarga) {
-      return '❌ Não criei. Se quiser, manda "livre" para ver horários vagos de hoje, ou me diz outro dia.';
-    }
-    return '❌ Ok, descartado. Nada foi alterado na agenda.';
+    if (pend.fase === 'confirma' && pend.sobrecarga) return t('discard.overload');
+    return t('discard.generic');
   }
 
   if (pend.fase === 'confirma' && ehSim(texto)) {
@@ -121,7 +97,7 @@ async function responderPendencia(texto, pend, auth, key) {
 
   if (pend.fase === 'escolha') {
     const escolhido = escolherCandidato(texto, pend.candidatos);
-    if (!escolhido) return 'Responde com o número da opção, ex.: 1';
+    if (!escolhido) return t('ask.option.number');
     pend.dados.evento = escolhido;
     return avancar(pend, auth, key);
   }
@@ -133,7 +109,7 @@ async function responderPendencia(texto, pend, auth, key) {
       delete pend.dados.evento;
     } else if (op === '2') pend.acao = 'remarcar';
     else if (op === '3') pend.acao = 'cancelar';
-    else return 'Responde (1) marcar novo, (2) alterar o existente ou (3) cancelar o existente.';
+    else return t('ask.op.123');
     return avancar(pend, auth, key);
   }
 
@@ -162,8 +138,8 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
 
   if (pend.acao === 'agendar') {
     const d = pend.dados;
-    if (!d.titulo) { pend.fase = 'slots'; return 'O que você quer marcar? (título do compromisso)'; }
-    if (!d.inicio) { pend.fase = 'slots'; return `"${d.titulo}" — que dia e que horas começa?`; }
+    if (!d.titulo) { pend.fase = 'slots'; return t('ask.what'); }
+    if (!d.inicio) { pend.fase = 'slots'; return t('ask.when', { title: d.titulo }); }
     // duração padrão de 1h quando o fim não é informado
     if (!d.fim) d.fim = new Date(new Date(d.inicio).getTime() + DURACAO_PADRAO_MIN * 60 * 1000).toISOString();
 
@@ -175,8 +151,7 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
         pend.candidatos = parecidos.slice(0, 5);
         pend.fase = 'operacao';
         pend.dados.evento = parecidos[0];
-        const lista = pend.candidatos.map(linhaCandidato).join('\n');
-        return `Já existe na agenda:\n${lista}\n\n(1) Marcar um novo mesmo assim\n(2) Alterar o existente para o novo horário\n(3) Cancelar o existente`;
+        return t('conflict.header', { list: pend.candidatos.map(linhaCandidato).join('\n') });
       }
     }
 
@@ -184,39 +159,46 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
     const aviso = await avisoSobrecarga(auth, d);
     pend.sobrecarga = Boolean(aviso);
     pend.fase = 'confirma';
-    const resumo = `Marcar "${d.titulo}" — ${fmtDataHora.format(new Date(d.inicio))} até ${fmtHora.format(new Date(d.fim))}.`;
-    return aviso ? `${resumo}\n${aviso} Confirma mesmo assim? (S/N)` : `${resumo} (S/N)`;
+    const vars = {
+      title: d.titulo,
+      start: fmtDataHora.format(new Date(d.inicio)),
+      end: fmtHora.format(new Date(d.fim)),
+    };
+    return aviso ? t('confirm.create.overload', { ...vars, warn: aviso }) : t('confirm.create', vars);
   }
 
   if (pend.acao === 'cancelar' || pend.acao === 'remarcar') {
     const d = pend.dados;
     if (!d.evento) {
       const busca = d.busca ?? d.titulo;
-      if (!busca) { pend.fase = 'slots'; return 'Qual compromisso? (me diz o nome dele)'; }
+      if (!busca) { pend.fase = 'slots'; return t('ask.which'); }
       const achados = await buscarEventoPorTitulo(auth, busca, 30);
       if (achados.length === 0) {
         pendencias.delete(key);
-        return `Não achei nenhum compromisso com "${busca}" nos próximos 30 dias. Manda "semana" para ver o que tem.`;
+        return t('notfound', { q: busca });
       }
       if (achados.length > 1) {
         pend.candidatos = achados.slice(0, 5);
         pend.fase = 'escolha';
-        const lista = pend.candidatos.map(linhaCandidato).join('\n');
-        return `Qual deles?\n${lista}`;
+        return t('ask.whichone', { list: pend.candidatos.map(linhaCandidato).join('\n') });
       }
       d.evento = achados[0];
     }
 
     if (pend.acao === 'remarcar' && !d.inicio) {
       pend.fase = 'slots';
-      return `"${d.evento.summary}" (${fmtDataHora.format(dataDoEvento(d.evento))}) — mudar para que dia e horário?`;
+      return t('ask.newtime', { title: d.evento.summary, when: fmtDataHora.format(dataDoEvento(d.evento)) });
     }
 
     pend.fase = 'confirma';
     if (pend.acao === 'cancelar') {
-      return `Cancelar "${d.evento.summary}" — ${fmtDataHora.format(dataDoEvento(d.evento))}. (S/N)`;
+      return t('confirm.cancel', { title: d.evento.summary, when: fmtDataHora.format(dataDoEvento(d.evento)) });
     }
-    return `Alterar "${d.evento.summary}" de ${fmtDataHora.format(dataDoEvento(d.evento))} para ${fmtDataHora.format(new Date(d.inicio))}. (S/N)`;
+    return t('confirm.reschedule', {
+      title: d.evento.summary,
+      from: fmtDataHora.format(dataDoEvento(d.evento)),
+      to: fmtDataHora.format(new Date(d.inicio)),
+    });
   }
 
   pendencias.delete(key);
@@ -233,7 +215,12 @@ async function avisoSobrecarga(auth, dados) {
   const totalHoras = (ocupadoMs + novoMs) / 3600000;
   if (totalHoras <= CONFIG.limiteHorasDia) return null;
   const horasOcupadas = Math.round((ocupadoMs / 3600000) * 10) / 10;
-  return `Atenção: ${fmtDia.format(inicio)} já está com ${horasOcupadas}h ocupadas (${eventos.length} compromisso${eventos.length > 1 ? 's' : ''}).`;
+  return t('overload.warn', {
+    day: fmtDia.format(inicio),
+    hours: horasOcupadas,
+    n: eventos.length,
+    s: eventos.length > 1 ? 's' : '',
+  });
 }
 
 function escolherCandidato(texto, candidatos) {
@@ -254,7 +241,7 @@ async function executar(pend, auth, key = DEFAULT_KEY) {
     const inicio = new Date(d.inicio);
     const fim = d.fim ? new Date(d.fim) : new Date(inicio.getTime() + DURACAO_PADRAO_MIN * 60 * 1000);
     const evento = await criarEvento(auth, { titulo: d.titulo, inicio, fim, lembrete: Boolean(d.lembrete) });
-    let msg = `✅ Agendado: ${d.titulo} — ${fmtDataHora.format(inicio)}\n${evento.htmlLink ?? ''}`;
+    let msg = t('done.created', { title: d.titulo, when: fmtDataHora.format(inicio), link: evento.htmlLink ?? '' });
 
     // follow-up automático de orçamento
     if (REGEX_ORCAMENTO.test(d.titulo)) {
@@ -264,17 +251,17 @@ async function executar(pend, auth, key = DEFAULT_KEY) {
         dataEnvio: inicio.toISOString(),
         criadoEm: Date.now(),
       });
-      msg += '\n\nQuer que eu cobre retorno automaticamente se não houver resposta? Em quantos dias? (responda um número, ou N para não)';
+      msg += t('followup.offer');
     }
     return msg;
   }
   if (pend.acao === 'cancelar') {
     await deletarEvento(auth, d.evento);
-    return `✅ Cancelado: ${d.evento.summary}`;
+    return t('done.canceled', { title: d.evento.summary });
   }
   if (pend.acao === 'remarcar') {
     await remarcarEvento(auth, d.evento, new Date(d.inicio));
-    return `✅ Remarcado: ${d.evento.summary} → ${fmtDataHora.format(new Date(d.inicio))}`;
+    return t('done.rescheduled', { title: d.evento.summary, when: fmtDataHora.format(new Date(d.inicio)) });
   }
   return null;
 }
@@ -284,20 +271,20 @@ async function executar(pend, auth, key = DEFAULT_KEY) {
 function responderFollowupDias(texto, pend, key) {
   if (ehNao(texto)) {
     pendencias.delete(key);
-    return 'Ok, sem cobrança automática.';
+    return t('followup.no');
   }
   const n = parseInt(texto.trim().match(/\d+/)?.[0] ?? '', 10);
-  if (!n || n < 1 || n > 90) return 'Responde com o número de dias (ex.: 3), ou N para não cobrar.';
+  if (!n || n < 1 || n > 90) return t('followup.askdays');
   criarFollowup({ cliente: pend.cliente, dataEnvio: pend.dataEnvio, prazoDias: n });
   pendencias.delete(key);
-  return `✅ Combinado. Em ${n} dia${n > 1 ? 's' : ''} eu pergunto se houve retorno.`;
+  return t('followup.set', { n, s: n > 1 ? 's' : '' });
 }
 
 async function responderFollowupResposta(texto, pend, auth, key) {
   if (ehSim(texto)) {
     atualizarFollowup(pend.followupId, { status: 'respondido' });
     pendencias.delete(key);
-    return '✅ Ótimo, follow-up encerrado.';
+    return t('followup.closed');
   }
   if (ehNao(texto)) {
     atualizarFollowup(pend.followupId, { status: 'cobrar' });
@@ -305,22 +292,20 @@ async function responderFollowupResposta(texto, pend, auth, key) {
     inicio.setMinutes(0, 0, 0);
     inicio.setHours(inicio.getHours() + 1);
     const fim = new Date(inicio.getTime() + 30 * 60 * 1000);
-    await criarEvento(auth, { titulo: `Cobrar retorno: ${pend.cliente}`, inicio, fim });
+    await criarEvento(auth, { titulo: t('followup.chase.title', { client: pend.cliente }), inicio, fim });
     pend.fase = 'followup_texto';
     pend.criadoEm = Date.now();
     pendencias.set(key, pend);
-    return `✅ Criei um lembrete de cobrança para hoje às ${fmtHora.format(inicio)}.\nQuer que eu sugira um texto de cobrança? (S/N)`;
+    return t('followup.reminderset', { time: fmtHora.format(inicio) });
   }
-  return `Houve retorno sobre "${pend.cliente}"? Responde S ou N.`;
+  return t('followup.askreturn', { client: pend.cliente });
 }
 
 async function responderFollowupTexto(texto, pend, key) {
   pendencias.delete(key);
-  if (!ehSim(texto)) return 'Ok.';
-  const sugestao = await gerarTexto(
-    `Escreva uma mensagem curta e educada de WhatsApp, em português do Brasil, cobrando gentilmente o retorno de um cliente sobre este orçamento enviado: "${pend.cliente}". Tom profissional e direto, sem assinatura. Responda apenas o texto da mensagem.`
-  );
-  return sugestao ? `Sugestão de texto:\n\n${sugestao}` : 'Não consegui gerar o texto agora, tenta de novo mais tarde.';
+  if (!ehSim(texto)) return t('followup.ok');
+  const sugestao = await gerarTexto(t('ia.chase.prompt', { client: pend.cliente }));
+  return sugestao ? t('followup.draft', { text: sugestao }) : t('followup.draftfail');
 }
 
 // ─── lembretes recorrentes mensais insistentes ───────────────────────────────
@@ -351,14 +336,11 @@ function avancarRecorrente(pend, key) {
   pend.criadoEm = Date.now();
   pendencias.set(key, pend);
   const d = pend.dados;
-  if (!d.titulo && !d.diaDoMes) {
-    pend.fase = 'rec_slots';
-    return 'O que lembrar e em que dia do mês? (ex.: _pagar cartão dia 10_)';
-  }
-  if (!d.titulo) { pend.fase = 'rec_slots'; return 'E o que você quer lembrar nesse dia?'; }
-  if (!d.diaDoMes) { pend.fase = 'rec_slots'; return `"${d.titulo}" — em que dia do mês? (1 a 31)`; }
+  if (!d.titulo && !d.diaDoMes) { pend.fase = 'rec_slots'; return t('rec.ask.both'); }
+  if (!d.titulo) { pend.fase = 'rec_slots'; return t('rec.ask.title'); }
+  if (!d.diaDoMes) { pend.fase = 'rec_slots'; return t('rec.ask.day', { title: d.titulo }); }
   pend.fase = 'rec_confirma';
-  return `Lembrete mensal todo dia ${d.diaDoMes}: *${d.titulo}*.\nInsisto 2 dias antes, 1 dia antes e no dia até você mandar "paguei"/"feito". (S/N)`;
+  return t('rec.confirm', { day: d.diaDoMes, title: d.titulo });
 }
 
 function responderRecSlots(texto, pend, key) {
@@ -372,7 +354,7 @@ function responderRecSlots(texto, pend, key) {
     d.titulo = texto.trim();
   } else if (!d.diaDoMes) {
     const n = parseInt(texto.match(/\d+/)?.[0] ?? '', 10);
-    if (!n || n < 1 || n > 31) return 'Me diz um dia do mês entre 1 e 31.';
+    if (!n || n < 1 || n > 31) return t('rec.badday');
     d.diaDoMes = n;
   }
   return avancarRecorrente(pend, key);
@@ -381,22 +363,22 @@ function responderRecSlots(texto, pend, key) {
 function responderRecConfirma(texto, pend, key) {
   if (ehNao(texto)) {
     pendencias.delete(key);
-    return '❌ Ok, descartado. Nenhum lembrete recorrente criado.';
+    return t('rec.discard');
   }
   if (ehSim(texto)) {
     pendencias.delete(key);
     const d = pend.dados;
     criarRecorrente({ titulo: d.titulo, diaDoMes: d.diaDoMes });
-    return `✅ Lembrete mensal criado: *${d.titulo}*, todo dia ${d.diaDoMes}.`;
+    return t('rec.created', { title: d.titulo, day: d.diaDoMes });
   }
-  return 'Responde S para confirmar ou N para descartar.';
+  return t('rec.ask.confirm');
 }
 
 // ─── checagem de fim de dia dos lembretes ────────────────────────────────────
 
 const ehLembrete = (e) =>
   e.extendedProperties?.private?.agendaBot === 'lembrete' ||
-  /lembrete|lembrar|cobrar/i.test(e.summary ?? '');
+  /lembrete|lembrar|cobrar|reminder|remind|chase/i.test(e.summary ?? '');
 
 // Monta a checagem do dia; retorna a primeira pergunta ou null se não há lembretes.
 export async function dispararCheckDia(auth) {
@@ -408,7 +390,7 @@ export async function dispararCheckDia(auth) {
     .filter((e) => ehLembrete(e) && !(e.summary ?? '').startsWith('✅'));
   if (fila.length === 0) return null;
   pendencias.set(DEFAULT_KEY, { fase: 'checkdia', fila, idx: 0, criadoEm: Date.now() });
-  return `Checagem do dia (${fila.length} lembrete${fila.length > 1 ? 's' : ''}):\n"${fila[0].summary}" foi feito? (S/N — N posterga para amanhã)`;
+  return t('checkdia.start', { n: fila.length, s: fila.length > 1 ? 's' : '', title: fila[0].summary });
 }
 
 async function responderCheckDia(texto, pend, auth, key) {
@@ -416,24 +398,23 @@ async function responderCheckDia(texto, pend, auth, key) {
   let resultado;
   if (ehSim(texto)) {
     await renomearEvento(auth, evento, `✅ ${evento.summary}`);
-    resultado = `✅ "${evento.summary}" marcado como feito.`;
+    resultado = t('checkdia.markeddone', { title: evento.summary });
   } else if (ehNao(texto)) {
     const novoInicio = new Date(dataDoEvento(evento).getTime() + 24 * 60 * 60 * 1000);
     await remarcarEvento(auth, evento, novoInicio);
-    resultado = `✅ "${evento.summary}" postergado para ${fmtDataHora.format(novoInicio)}.`;
+    resultado = t('checkdia.postponed', { title: evento.summary, when: fmtDataHora.format(novoInicio) });
   } else {
-    return `"${evento.summary}" foi feito? Responde S ou N.`;
+    return t('checkdia.ask', { title: evento.summary });
   }
 
   pend.idx += 1;
   if (pend.idx >= pend.fila.length) {
     pendencias.delete(key);
-    return `${resultado}\nChecagem do dia concluída.`;
+    return t('checkdia.finished', { result: resultado });
   }
   pend.criadoEm = Date.now();
   pendencias.set(key, pend);
-  const proximo = pend.fila[pend.idx];
-  return `${resultado}\n\n"${proximo.summary}" foi feito? (S/N)`;
+  return t('checkdia.next', { result: resultado, title: pend.fila[pend.idx].summary });
 }
 
 // Chamado pelo cron diário (09:00): dispara a pergunta de cobrança pendente.
@@ -449,5 +430,5 @@ export async function dispararCobrancas(enviar) {
     cliente: devido.cliente,
     criadoEm: Date.now(),
   });
-  await enviar(`Já teve retorno sobre "${devido.cliente}"? (S/N)`);
+  await enviar(t('followup.due', { client: devido.cliente }));
 }

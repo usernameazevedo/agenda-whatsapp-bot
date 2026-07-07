@@ -6,6 +6,7 @@
 // A baixa é dada por uma frase que o usuário escolhe (ex.: "paguei o cartão").
 import fs from 'node:fs';
 import path from 'node:path';
+import { t, PALAVRAS_FEITO } from './i18n.js';
 
 const ARQUIVO = path.resolve('recorrentes.json');
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -18,13 +19,7 @@ const DIA_DO_FIM = 22;    // última hora de disparo no dia-alvo
 const STOPWORDS = new Set([
   'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'e',
   'um', 'uma', 'no', 'na', 'pro', 'pra', 'meu', 'minha', 'ja',
-]);
-
-// verbos/expressões que sinalizam "concluí a tarefa"
-const PALAVRAS_FEITO = new Set([
-  'feito', 'feita', 'fiz', 'paguei', 'pago', 'paga', 'pagei', 'pronto',
-  'resolvi', 'resolvido', 'mandei', 'enviei', 'enviado', 'concluido',
-  'concluida', 'conclui', 'ok', 'done', 'quitado', 'quitei', 'terminei',
+  'the', 'to', 'my', 'a', 'of', 'for',
 ]);
 
 function carregar() {
@@ -141,9 +136,10 @@ export function tentarCheck(mensagem) {
 }
 
 function montarMensagem(r, diasAte) {
-  if (diasAte === 2) return `📌 Lembrete: faltam 2 dias para *${r.titulo}* (dia ${r.diaDoMes}).`;
-  if (diasAte === 1) return `⏰ *${r.titulo}* é amanhã (dia ${r.diaDoMes}). Não esquece!`;
-  return `🚨 HOJE é dia de *${r.titulo}*!\nQuando fizer, me manda "paguei" ou "feito" que eu paro de avisar.`;
+  const vars = { title: r.titulo, day: r.diaDoMes };
+  if (diasAte === 2) return t('rec.msg.2d', vars);
+  if (diasAte === 1) return t('rec.msg.1d', vars);
+  return t('rec.msg.0d', vars);
 }
 
 function horasDeEnvio(diasAte) {

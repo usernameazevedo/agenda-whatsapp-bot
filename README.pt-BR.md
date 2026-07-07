@@ -122,9 +122,19 @@ Este projeto passou por uma jornada de depuração real. Os pepinos e as soluç�
 5. **Fluxo OAuth de "colar código" não existe mais** → o Google exige redirect; este projeto sobe um servidor local em `localhost:3535` que captura a autorização sozinho.
 6. **Tudo isso agora é auto-recuperável** → o watchdog interno detecta travamento/desconexão e força um renascimento limpo via pm2.
 
+## 🌐 Idioma
+
+O bot vem com **português e inglês**. Escolha em `src/config.js`:
+
+```js
+idioma: 'pt-BR',   // ou 'en'
+```
+
+Ou via ambiente: `BOT_LANG=en`. Troca todas as respostas, o manual, o formato de data/hora (24h vs 12h), a confirmação S/N ↔ Y/N e o prompt de interpretação da IA. Todos os textos ficam num único arquivo: `src/i18n.js`.
+
 ## ⚙️ Configuração
 
-Tudo em `src/config.js`: horários dos resumos (cron), antecedência dos lembretes, limite de horas do dia, número da secretária, calendários incluídos. Variáveis de ambiente: `ANTHROPIC_API_KEY`, `WHATSAPP_TO`, `DAILY_HOURS_LIMIT`.
+Tudo em `src/config.js`: idioma, horários dos resumos (cron), antecedência dos lembretes, limite de horas do dia, número da secretária, calendários incluídos. Variáveis de ambiente: `ANTHROPIC_API_KEY`, `WHATSAPP_TO`, `DAILY_HOURS_LIMIT`, `BOT_LANG`.
 
 ## 🗺️ Roadmap
 
