@@ -139,20 +139,37 @@ setInterval(async () => {
 import fs from 'fs';
 const OUTBOX = new URL('../outbox.json', import.meta.url).pathname;
 
+let outboxOcupada = false;
+let gruposCache = null;
+
 async function processarOutbox() {
+  if (outboxOcupada) return; // evita envios duplicados por execuções sobrepostas
+  outboxOcupada = true;
+  try {
+    await processarOutboxInterno();
+  } finally {
+    outboxOcupada = false;
+  }
+}
+
+async function processarOutboxInterno() {
   let fila;
   try {
     if (!fs.existsSync(OUTBOX)) return;
     fila = JSON.parse(fs.readFileSync(OUTBOX, 'utf8'));
   } catch { return; }
   if (!Array.isArray(fila) || fila.length === 0) return;
+  // reivindica a fila imediatamente: esvazia o arquivo antes de enviar,
+  // para que novas execuções não vejam os mesmos itens
+  fs.writeFileSync(OUTBOX, '[]');
   const restantes = [];
   for (const item of fila) {
     try {
       let chatId;
       if (item.grupo) {
-        const chats = await whatsapp.getChats();
-        const g = chats.find((c) => c.isGroup && c.name === item.grupo);
+        if (!gruposCache) gruposCache = await whatsapp.getChats();
+        let g = gruposCache.find((c) => c.isGroup && c.name === item.grupo);
+        if (!g) { gruposCache = await whatsapp.getChats(); g = gruposCache.find((c) => c.isGroup && c.name === item.grupo); }
         if (!g) throw new Error(`grupo "${item.grupo}" não encontrado`);
         chatId = g.id._serialized;
       } else if (item.para) {
@@ -167,7 +184,12 @@ async function processarOutbox() {
       if (item.tentativas < 10) restantes.push(item);
     }
   }
-  fs.writeFileSync(OUTBOX, JSON.stringify(restantes, null, 1));
+  if (restantes.length) {
+    // devolve as falhas à fila sem apagar itens que chegaram durante o envio
+    let atual = [];
+    try { atual = JSON.parse(fs.readFileSync(OUTBOX, 'utf8')); } catch { /* mantém vazio */ }
+    fs.writeFileSync(OUTBOX, JSON.stringify([...restantes, ...atual], null, 1));
+  }
 }
 
 async function main() {
