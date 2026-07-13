@@ -1,0 +1,218 @@
+// Agente com tool use: interpreta frases livres podendo consultar a agenda
+// (listar eventos, buscar por título, horários livres) antes de decidir a ação.
+// Devolve a mesma intenção estruturada que conversa.js já consome, ou uma
+// resposta direta em texto (campo "resposta") para perguntas de consulta.
+// Ativa somente se ANTHROPIC_API_KEY estiver definida; em erro, o chamador
+// deve cair no interpretar() clássico de ia.js.
+import { CONFIG } from './config.js';
+import { buscarEventoPorTitulo, listarEventos } from './calendar.js';
+import { LOCALE, fmtDataHora, fmtHora } from './i18n.js';
+
+const API_KEY = process.env.ANTHROPIC_API_KEY;
+const MODEL = 'claude-haiku-4-5-20251001';
+const MAX_RODADAS = 6;
+
+export const agenteDisponivel = Boolean(API_KEY);
+
+const SYSTEM_PT = `Você é o assistente de agenda do usuário (Google Calendar) via WhatsApp. Data/hora atual: {AGORA} (America/Sao_Paulo, offset -03:00). Horários sempre em ISO8601 com -03:00.
+
+Você tem ferramentas para CONSULTAR a agenda (listar eventos, buscar evento por título, horários livres). Use-as quando precisar de informação real antes de decidir — ex.: "remarca X para o primeiro horário livre de sexta" exige buscar X e consultar os horários livres de sexta. Não chute: consulte.
+
+Ao terminar, chame SEMPRE a ferramenta "concluir" exatamente uma vez com o resultado:
+- Pedido de criar/cancelar/remarcar: acao correspondente + campos preenchidos. Você NÃO executa nada; o sistema pedirá confirmação ao usuário.
+- Pergunta sobre a agenda que você já respondeu consultando as ferramentas (disponibilidade, "quando é X?", conflitos): acao "responder" + campo "resposta" com o texto pronto para o WhatsApp (curto, com • para listas).
+- "o que tenho hoje/amanhã/na semana?" simples: acao "resumo" + periodo (o sistema formata).
+- Lembrete mensal fixo ("pagar cartão dia 10 de todo mês"): recorrente true + diaDoMes + titulo.
+- "me lembra de X" (sem repetição mensal) => acao agendar com lembrete true. Reuniões/consultas => lembrete false.
+- NUNCA invente horário que o usuário não disse — exceto quando ele pediu explicitamente para você escolher (ex.: "no primeiro horário livre"), aí consulte horarios_livres e use o slot real.
+- Mensagem que não é sobre agenda: acao "nada".`;
+
+const SYSTEM_EN = `You are the user's calendar assistant (Google Calendar) on WhatsApp. Current date/time: {AGORA} (America/Sao_Paulo, offset -03:00). Always output times in ISO8601 with -03:00.
+
+You have tools to QUERY the calendar (list events, search by title, free slots). Use them whenever you need real information before deciding — e.g. "move X to Friday's first free morning slot" requires searching X and checking Friday's free slots. Don't guess: query.
+
+When done, ALWAYS call the "concluir" tool exactly once:
+- Create/cancel/reschedule requests: matching acao + filled fields. You do NOT execute anything; the system asks the user to confirm.
+- Calendar questions you answered via tools (availability, "when is X?", conflicts): acao "responder" + "resposta" with the WhatsApp-ready text (short, • for lists).
+- Simple "what do I have today/tomorrow/this week?": acao "resumo" + periodo.
+- Fixed monthly reminder: recorrente true + diaDoMes + titulo.
+- "remind me to X" (not monthly) => acao agendar with lembrete true. Meetings/appointments => lembrete false.
+- NEVER invent a time the user didn't say — unless they explicitly asked you to pick (e.g. "first free slot"); then use horarios_livres and pick a real slot.
+- Not about the calendar: acao "nada".`;
+
+const TOOLS = [
+  {
+    name: 'listar_eventos',
+    description: 'Lista os eventos da agenda entre duas datas (máx. 14 dias). Use para ver o que existe num dia/período.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        inicio: { type: 'string', description: 'Data/hora inicial, ISO8601 (ex.: 2026-07-17T00:00:00-03:00)' },
+        fim: { type: 'string', description: 'Data/hora final, ISO8601' },
+      },
+      required: ['inicio', 'fim'],
+    },
+  },
+  {
+    name: 'buscar_evento',
+    description: 'Busca eventos futuros (próximos 30 dias) cujo título contém o termo. Use para localizar o evento que o usuário quer cancelar/remarcar.',
+    input_schema: {
+      type: 'object',
+      properties: { termo: { type: 'string', description: 'Trecho do título do evento' } },
+      required: ['termo'],
+    },
+  },
+  {
+    name: 'horarios_livres',
+    description: 'Retorna os horários livres (blocos ≥30min, entre 08:00 e 22:00) de um dia específico.',
+    input_schema: {
+      type: 'object',
+      properties: { dia: { type: 'string', description: 'O dia, formato YYYY-MM-DD' } },
+      required: ['dia'],
+    },
+  },
+  {
+    name: 'concluir',
+    description: 'Entrega o resultado final. Chame exatamente uma vez, ao terminar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        acao: { type: 'string', enum: ['agendar', 'cancelar', 'remarcar', 'resumo', 'livre', 'responder', 'nada'] },
+        titulo: { type: ['string', 'null'] },
+        busca: { type: ['string', 'null'], description: 'Termo para localizar o evento (cancelar/remarcar)' },
+        inicio: { type: ['string', 'null'], description: 'ISO8601 com -03:00' },
+        fim: { type: ['string', 'null'] },
+        periodo: { type: ['string', 'null'], enum: ['hoje', 'amanha', 'semana', null] },
+        lembrete: { type: 'boolean' },
+        recorrente: { type: 'boolean' },
+        diaDoMes: { type: ['number', 'null'] },
+        resposta: { type: ['string', 'null'], description: 'Texto pronto para o usuário (apenas acao "responder")' },
+      },
+      required: ['acao'],
+    },
+  },
+];
+
+// ─── execução das ferramentas ────────────────────────────────────────────────
+
+const linhaEvento = (e) => {
+  const ini = e.start?.dateTime ? new Date(e.start.dateTime) : null;
+  const fim = e.end?.dateTime ? new Date(e.end.dateTime) : null;
+  if (!ini) return `• ${e.summary} (dia inteiro ${e.start?.date})`;
+  return `• ${e.summary} — ${fmtDataHora.format(ini)}${fim ? `–${fmtHora.format(fim)}` : ''}`;
+};
+
+async function executarFerramenta(nome, input, auth) {
+  if (nome === 'listar_eventos') {
+    const ini = new Date(input.inicio);
+    let fim = new Date(input.fim);
+    if (fim - ini > 14 * 24 * 3600 * 1000) fim = new Date(ini.getTime() + 14 * 24 * 3600 * 1000);
+    const eventos = await listarEventos(auth, ini, fim);
+    return eventos.length ? eventos.map(linhaEvento).join('\n') : 'Nenhum evento no período.';
+  }
+  if (nome === 'buscar_evento') {
+    const achados = await buscarEventoPorTitulo(auth, input.termo, 30);
+    return achados.length
+      ? achados.slice(0, 8).map(linhaEvento).join('\n')
+      : `Nenhum evento futuro com "${input.termo}".`;
+  }
+  if (nome === 'horarios_livres') {
+    const diaIni = new Date(`${input.dia}T00:00:00-03:00`);
+    const diaFim = new Date(diaIni.getTime() + 24 * 3600 * 1000);
+    const eventos = (await listarEventos(auth, diaIni, diaFim))
+      .filter((e) => e.start?.dateTime && e.end?.dateTime)
+      .sort((a, b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
+    const abertura = new Date(`${input.dia}T08:00:00-03:00`);
+    const fechamento = new Date(`${input.dia}T22:00:00-03:00`);
+    let cursor = abertura;
+    const livres = [];
+    for (const e of eventos) {
+      const ini = new Date(e.start.dateTime);
+      const fim = new Date(e.end.dateTime);
+      if (ini - cursor >= 30 * 60 * 1000) livres.push([new Date(cursor), ini]);
+      if (fim > cursor) cursor = fim;
+    }
+    if (fechamento - cursor >= 30 * 60 * 1000) livres.push([new Date(cursor), fechamento]);
+    return livres.length
+      ? livres.map(([a, b]) => `• ${fmtHora.format(a)} – ${fmtHora.format(b)}`).join('\n')
+      : 'Dia sem horários livres entre 08:00 e 22:00.';
+  }
+  return `Ferramenta desconhecida: ${nome}`;
+}
+
+// ─── loop agêntico ───────────────────────────────────────────────────────────
+
+async function chamarAPI(body) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API Claude retornou ${res.status}`);
+  return res.json();
+}
+
+// Interpreta a mensagem podendo consultar a agenda. Retorna a intenção
+// (mesmo formato de ia.interpretar, mais acao "responder" + resposta),
+// ou null se a IA está desativada.
+export async function interpretarComAgente(texto, auth) {
+  if (!API_KEY) return null;
+
+  const system = (LOCALE === 'en' ? SYSTEM_EN : SYSTEM_PT).replace(
+    '{AGORA}',
+    new Date().toLocaleString(LOCALE === 'en' ? 'en-US' : 'pt-BR', { timeZone: 'America/Sao_Paulo' })
+  );
+  const messages = [{ role: 'user', content: texto }];
+
+  for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
+    const data = await chamarAPI({
+      model: MODEL,
+      max_tokens: 1000,
+      system,
+      tools: TOOLS,
+      // na última rodada força a conclusão para não estourar o limite
+      tool_choice: rodada === MAX_RODADAS - 1 ? { type: 'tool', name: 'concluir' } : { type: 'auto' },
+      messages,
+    });
+
+    const chamadas = (data.content ?? []).filter((b) => b.type === 'tool_use');
+    const conclusao = chamadas.find((c) => c.name === 'concluir');
+    if (conclusao) return conclusao.input;
+
+    if (data.stop_reason !== 'tool_use' || chamadas.length === 0) {
+      // terminou em texto sem concluir — pede a conclusão estruturada
+      messages.push({ role: 'assistant', content: data.content });
+      messages.push({ role: 'user', content: 'Chame a ferramenta "concluir" agora com o resultado.' });
+      const final = await chamarAPI({
+        model: MODEL,
+        max_tokens: 1000,
+        system,
+        tools: TOOLS,
+        tool_choice: { type: 'tool', name: 'concluir' },
+        messages,
+      });
+      const c = (final.content ?? []).find((b) => b.type === 'tool_use' && b.name === 'concluir');
+      return c ? c.input : { acao: 'nada' };
+    }
+
+    messages.push({ role: 'assistant', content: data.content });
+    const resultados = [];
+    for (const chamada of chamadas) {
+      let conteudo;
+      try {
+        conteudo = await executarFerramenta(chamada.name, chamada.input, auth);
+      } catch (err) {
+        resultados.push({ type: 'tool_result', tool_use_id: chamada.id, content: `Erro: ${err.message}`, is_error: true });
+        continue;
+      }
+      resultados.push({ type: 'tool_result', tool_use_id: chamada.id, content: conteudo });
+    }
+    messages.push({ role: 'user', content: resultados });
+  }
+
+  return { acao: 'nada' };
+}
