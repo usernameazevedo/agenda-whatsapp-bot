@@ -10,6 +10,7 @@ import {
   renomearEvento,
 } from './calendar.js';
 import { interpretar, gerarTexto } from './ia.js';
+import { interpretarComAgente, agenteDisponivel } from './agente.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
 import { criarRecorrente } from './recorrentes.js';
 import { t, fmtDataHora, fmtHora, fmtDia, ehSim, ehNao } from './i18n.js';
@@ -48,8 +49,19 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
 
   if (pend) return responderPendencia(texto, pend, auth, key);
 
-  const intent = await interpretar(texto);
+  // mensagem nova: agente com ferramentas (consulta a agenda antes de decidir);
+  // se falhar, cai no interpretador simples
+  let intent = null;
+  if (agenteDisponivel) {
+    try {
+      intent = await interpretarComAgente(texto, auth);
+    } catch (err) {
+      console.error('Agente falhou, usando interpretador simples:', err.message);
+    }
+  }
+  if (!intent) intent = await interpretar(texto);
   if (!intent || intent.acao === 'nada') return null;
+  if (intent.acao === 'responder' && intent.resposta) return intent.resposta;
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
 
   // lembrete recorrente mensal insistente (ex.: pagar o cartão dia 10 de todo mês)
