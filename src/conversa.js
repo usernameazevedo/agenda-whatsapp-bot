@@ -68,13 +68,24 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
 
   // tarefa do dia (a fazer sem horário): "tenho que ligar pro fulano", "preciso mandar o documento"
   if (intent.acao === 'tarefa') {
-    const data = /^\d{4}-\d{2}-\d{2}$/.test(intent.data ?? '') ? intent.data : hojeStr();
-    const titulo = tituloValido(intent.titulo);
-    if (!titulo) {
-      pendencias.set(key, { fase: 'tarefa_texto', data, criadoEm: Date.now() });
-      return t('task.ask.what', { date: dataCurta(data) });
+    // várias tarefas numa mensagem só (cada uma pode ter dia próprio)
+    const lote = (intent.tarefas ?? [])
+      .map((x) => ({ titulo: tituloValido(x?.titulo), data: dataValida(x?.data) }))
+      .filter((x) => x.titulo);
+    if (lote.length > 1) {
+      for (const x of lote) criarTarefa(x.titulo, x.data);
+      const linhas = lote
+        .map((x) => `• ${x.titulo} — ${x.data === hojeStr() ? t('task.today.word') : dataCurta(x.data)}`)
+        .join('\n');
+      return t('task.created.multi', { n: lote.length, lines: linhas, list: formatarTarefas() ?? '—' });
     }
-    return criarTarefaMsg(titulo, data);
+
+    const unica = lote[0] ?? { titulo: tituloValido(intent.titulo), data: dataValida(intent.data) };
+    if (!unica.titulo) {
+      pendencias.set(key, { fase: 'tarefa_texto', data: unica.data, criadoEm: Date.now() });
+      return t('task.ask.what', { date: dataCurta(unica.data) });
+    }
+    return criarTarefaMsg(unica.titulo, unica.data);
   }
 
   // lembrete recorrente mensal insistente (ex.: pagar o cartão dia 10 de todo mês)
@@ -148,6 +159,8 @@ async function responderPendencia(texto, pend, auth, key) {
   if (intent) mesclar(pend.dados, intent);
   return avancar(pend, auth, key);
 }
+
+const dataValida = (data) => (/^\d{4}-\d{2}-\d{2}$/.test(data ?? '') ? data : hojeStr());
 
 // rejeita títulos vazios ou placeholders inventados pelo modelo
 function tituloValido(titulo) {
