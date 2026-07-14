@@ -10,7 +10,8 @@ import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
 import { postergarPendentes, formatarTarefas } from './tarefas.js';
 import { transcreverAudio, audioDisponivel } from './audio.js';
-import { interceptarBridge } from './claude-bridge.js';
+import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
+import { diagnosticarAutomacoes } from './diagnostico.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
@@ -273,6 +274,24 @@ async function main() {
       const pergunta = await dispararCheckDia(auth);
       if (pergunta) await enviarMensagem(pergunta);
     }), opts);
+    // briefing matinal inteligente (Claude analisa agenda + tarefas + followups)
+    cron.schedule('10 7 * * 1-6', () => comSaude(async () => {
+      const hoje = inicioDoDia(new Date());
+      const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
+      const contexto = [
+        resumoDiario(eventos, hoje, 'Agenda de hoje', formatarTarefas()),
+        'followups.json: ' + (fs.existsSync(new URL('../followups.json', import.meta.url).pathname)
+          ? fs.readFileSync(new URL('../followups.json', import.meta.url).pathname, 'utf8')
+          : '[]'),
+      ].join('\n\n');
+      const briefing = await gerarBriefing(contexto);
+      if (briefing) await enviarMensagem(briefing);
+    }), opts);
+    // diagnóstico diário das automações do Mac (só avisa se algo quebrou)
+    cron.schedule('0 8 * * *', () => comSaude(async () => {
+      const alerta = await diagnosticarAutomacoes();
+      if (alerta) await enviarMensagem(alerta);
+    }), opts);
     // lembretes recorrentes insistentes: verifica no início de cada hora
     cron.schedule('0 * * * *', () => comSaude(async () => {
       const hora = horaAgora();
@@ -285,7 +304,7 @@ async function main() {
       `${CONFIG.destinatario}@c.us`,
       ...(CONFIG.chatsExtras ?? []),
     ]);
-    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨', '📊', '⏳'];
+    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨', '📊', '⏳', '🧠', '💡', '🩺'];
     whatsapp.on('message_create', async (msg) => {
       try {
         // id do chat derivado da própria mensagem (msg.getChat() está quebrado

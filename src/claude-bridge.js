@@ -3,6 +3,7 @@
 // "relatorio <user>"  → roda o pipeline de dados do instagram-analytics-noxx.
 // Restrito ao dono (origem 'self'); uma execução por vez.
 import { spawn } from 'node:child_process';
+import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -77,6 +78,57 @@ async function gerarRelatorio(username, nomeCliente) {
   return `📊 Dados de @${username} coletados com sucesso.\n\n${truncar(cauda)}\n\nPróximo passo: gerar o deck com a skill /noxx-relatorio-instagram no Claude.`;
 }
 
+// ─── item 3: briefing matinal inteligente ────────────────────────────────────
+// Recebe o contexto do dia (agenda + tarefas + followups) e devolve uma análise
+// curta com prioridades. Usado pelo cron do index.js; retorna null em falha.
+export async function gerarBriefing(contexto) {
+  const pedido =
+    'Analise o dia a seguir e escreva um briefing de no máximo 8 linhas para WhatsApp: ' +
+    'priorize o que é mais importante, aponte tarefas postergadas repetidamente, conflitos ou dias sobrecarregados, ' +
+    'e termine com uma sugestão prática. Sem markdown, sem saudação.\n\n' + contexto;
+  const { ok, saida } = await rodarShell(
+    'claude -p "$BRIDGE_PROMPT" --model haiku < /dev/null',
+    { cwd: DIR_CLAUDE, timeoutMs: TIMEOUT_CLAUDE_MS, env: { BRIDGE_PROMPT: pedido } },
+  );
+  return ok && saida ? `🧠 Briefing NOXX:\n${truncar(saida)}` : null;
+}
+
+// ─── item 4: caixa de ideias por cliente ─────────────────────────────────────
+const DIR_NOXX = path.join(HOME, 'claude', 'Documentos-NOXX');
+const PASTAS_IGNORADAS = new Set(['DOC', 'Propostas', 'README.md']);
+
+function listarClientes() {
+  return fsSync.readdirSync(DIR_NOXX, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !PASTAS_IGNORADAS.has(d.name))
+    .map((d) => d.name);
+}
+
+async function classificarCliente(textoIdeia) {
+  const clientes = listarClientes();
+  const pedido =
+    `Clientes: ${clientes.join(' | ')}\nIdeia: "${textoIdeia}"\n` +
+    'Responda SOMENTE com o nome exato de um cliente da lista, ou "nenhum".';
+  const { saida } = await rodarShell(
+    'claude -p "$BRIDGE_PROMPT" --model haiku < /dev/null',
+    { cwd: DIR_CLAUDE, timeoutMs: 60 * 1000, env: { BRIDGE_PROMPT: pedido } },
+  );
+  const nome = saida.trim().split('\n').pop().trim();
+  return clientes.find((c) => c.toLowerCase() === nome.toLowerCase()) ?? null;
+}
+
+async function guardarIdeia(textoIdeia) {
+  const cliente = await classificarCliente(textoIdeia);
+  if (!cliente) {
+    return `🤔 Não identifiquei o cliente da ideia. Clientes atuais: ${listarClientes().join(', ')}. Reenvie citando o nome.`;
+  }
+  const arquivo = path.join(DIR_NOXX, cliente, 'ideias.md');
+  const dia = new Date().toLocaleDateString('pt-BR');
+  const linha = `- **${dia}** — ${textoIdeia.trim().replace(/\n+/g, ' ')}\n`;
+  if (!fsSync.existsSync(arquivo)) fsSync.writeFileSync(arquivo, `# Ideias — ${cliente}\n\n`);
+  fsSync.appendFileSync(arquivo, linha);
+  return `💡 Ideia guardada em ${cliente}/ideias.md`;
+}
+
 // Detecta se a mensagem é para a ponte. Retorna null ou { aviso, rodar }.
 export function interceptarBridge(texto, origem) {
   if (origem !== 'self') return null; // só o dono aciona Claude/relatórios
@@ -84,7 +136,8 @@ export function interceptarBridge(texto, origem) {
 
   const mClaude = msg.match(/^claude[:,]\s*(.+)$/is);
   const mRel = msg.match(/^relat[oó]rio\s+@?([\w.]+)\s*(?:"([^"]+)"|(.+))?$/i);
-  if (!mClaude && !mRel) return null;
+  const mIdeia = msg.match(/^ideia[:,]?\s+(.+)$/is);
+  if (!mClaude && !mRel && !mIdeia) return null;
 
   if (ocupado) {
     return { aviso: '⏳ Já existe um pedido do Claude em andamento. Tente de novo quando ele terminar.', rodar: null };
@@ -92,10 +145,14 @@ export function interceptarBridge(texto, origem) {
 
   const tarefa = mClaude
     ? () => pedidoClaude(mClaude[1])
-    : () => gerarRelatorio(mRel[1], mRel[2] || mRel[3]);
+    : mRel
+      ? () => gerarRelatorio(mRel[1], mRel[2] || mRel[3])
+      : () => guardarIdeia(mIdeia[1]);
   const aviso = mClaude
     ? '🤖 Pedido enviado ao Claude, processando...'
-    : `📊 Coletando dados de @${mRel[1]} (pode levar alguns minutos)...`;
+    : mRel
+      ? `📊 Coletando dados de @${mRel[1]} (pode levar alguns minutos)...`
+      : '💡 Classificando e guardando a ideia...';
 
   return {
     aviso,
