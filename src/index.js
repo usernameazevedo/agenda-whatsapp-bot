@@ -10,6 +10,7 @@ import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
 import { postergarPendentes, formatarTarefas } from './tarefas.js';
 import { transcreverAudio, audioDisponivel } from './audio.js';
+import { interceptarBridge } from './claude-bridge.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
@@ -284,7 +285,7 @@ async function main() {
       `${CONFIG.destinatario}@c.us`,
       ...(CONFIG.chatsExtras ?? []),
     ]);
-    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨'];
+    const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨', '📊', '⏳'];
     whatsapp.on('message_create', async (msg) => {
       try {
         // id do chat derivado da própria mensagem (msg.getChat() está quebrado
@@ -336,6 +337,22 @@ async function main() {
         }
 
         console.log(`[${new Date().toISOString()}] Mensagem recebida (${origem}): ${texto.slice(0, 60)}`);
+
+        // ponte Claude/relatório: responde na hora e roda em background
+        const bridge = interceptarBridge(texto, origem);
+        if (bridge) {
+          await enviarPara(chatId, prefixoAudio + bridge.aviso);
+          if (bridge.rodar) {
+            bridge.rodar()
+              .then((resp) => enviarPara(chatId, resp))
+              .catch((err) => {
+                console.error('claude-bridge:', err.message);
+                return enviarPara(chatId, `🤖 Erro no pedido: ${err.message}`);
+              });
+          }
+          return;
+        }
+
         const resposta = await processarComando(texto, auth, origem);
         if (resposta) {
           await enviarPara(chatId, prefixoAudio + resposta);
