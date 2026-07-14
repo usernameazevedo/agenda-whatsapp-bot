@@ -13,7 +13,7 @@ import { interpretar, gerarTexto } from './ia.js';
 import { interpretarComAgente, agenteDisponivel } from './agente.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
 import { criarRecorrente } from './recorrentes.js';
-import { criarTarefa, tarefasDoDia, pendentesDoDia, marcarFeitaPorId, formatarTarefas, hojeStr, dataCurta, buscarPendentePorTexto, adicionarNotaPorId } from './tarefas.js';
+import { criarTarefa, tarefasDoDia, pendentesDoDia, marcarFeitaPorId, formatarTarefas, hojeStr, dataCurta, buscarPendentePorTexto, adicionarNotaPorId, atualizarInfoPorId } from './tarefas.js';
 import { isLembrete } from './formatar.js';
 import { t, fmtDataHora, fmtHora, fmtDia, ehSim, ehNao } from './i18n.js';
 
@@ -66,8 +66,10 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   if (intent.acao === 'responder' && intent.resposta) return intent.resposta;
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
 
-  // acrescenta informação a uma tarefa existente ("na tarefa do João, o número é 9999")
-  if (intent.acao === 'tarefa_nota' && intent.nota) {
+  // acrescenta informação a uma tarefa existente: nota livre e/ou campos
+  // estruturados (horário, local, cliente, detalhes) — só quando pedido
+  const temCampos = intent.campos && Object.values(intent.campos).some((v) => (v ?? '').toString().trim());
+  if (intent.acao === 'tarefa_nota' && (intent.nota || temCampos)) {
     const achadas = buscarPendentePorTexto(intent.busca ?? intent.titulo ?? '');
     if (achadas.length === 0) {
       const lista = formatarTarefas();
@@ -76,7 +78,8 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
         : t('task.list.empty', { date: dataCurta(hojeStr()) });
     }
     const alvo = achadas[0];
-    adicionarNotaPorId(alvo.id, intent.nota);
+    if (temCampos) atualizarInfoPorId(alvo.id, intent.campos);
+    if (intent.nota) adicionarNotaPorId(alvo.id, intent.nota);
     return t('task.note.added', { text: alvo.texto, list: formatarTarefas(alvo.data) });
   }
 
