@@ -65,11 +65,20 @@ async function enviarPara(chatId, texto) {
 // id do grupo de destino (resolvido no ready); null = conversa consigo mesmo
 let grupoId = null;
 
+// compara nomes de grupo ignorando espaços, emoji, acentos e maiúsculas
+const nomeNormalizado = (s) =>
+  (s ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .toLowerCase();
+
 async function resolverGrupo() {
   if (!CONFIG.grupo) return;
   try {
     const chats = await whatsapp.getChats();
-    const g = chats.find((c) => c.isGroup && c.name === CONFIG.grupo);
+    const alvo = nomeNormalizado(CONFIG.grupo);
+    const g = chats.find((c) => c.isGroup && (c.name === CONFIG.grupo || nomeNormalizado(c.name) === alvo));
     if (g) {
       grupoId = g.id._serialized;
       console.log(`Mensagens do bot irão para o grupo "${CONFIG.grupo}" (${grupoId}).`);
