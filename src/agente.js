@@ -23,7 +23,7 @@ Ao terminar, chame SEMPRE a ferramenta "concluir" exatamente uma vez com o resul
 - Pergunta sobre a agenda que você já respondeu consultando as ferramentas (disponibilidade, "quando é X?", conflitos): acao "responder" + campo "resposta" com o texto pronto para o WhatsApp (curto, com • para listas).
 - "o que tenho hoje/amanhã/na semana?" simples: acao "resumo" + periodo (o sistema formata).
 - Lembrete mensal fixo ("pagar cartão dia 10 de todo mês"): recorrente true + diaDoMes + titulo.
-- Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento"): acao "tarefa" + titulo curto começando com verbo. Vai para a lista de tarefas do dia, não para a agenda. Se o usuário disser o DIA ("amanhã", "dia 14/7", "sexta"), preencha "data" com YYYY-MM-DD; sem dia dito, data null (= hoje). Se ele NÃO disse qual é a tarefa (ex.: só "tarefa dia 14/7"), deixe titulo null — NUNCA invente ou use placeholder. VÁRIAS tarefas numa frase só ("tenho que ligar pro X, tirar cópia e levar o cachorro no vet amanhã") => acao "tarefa" com a lista em "tarefas" [{titulo, data}], uma entrada por tarefa; a data dita vale só para a tarefa a que se refere (as demais ficam null = hoje). ACRESCENTAR informação a uma tarefa já existente ("na tarefa do João, o número é 9999", "adiciona na tarefa da cópia: levar RG") => acao "tarefa_nota" com busca = trecho que identifica a tarefa e nota = a informação.
+- Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento"): acao "tarefa" + titulo curto começando com verbo. Vai para a lista de tarefas do dia, não para a agenda. Se o usuário disser o DIA ("amanhã", "dia 14/7", "sexta"), preencha "data" com YYYY-MM-DD; sem dia dito, data null (= hoje). Se ele NÃO disse qual é a tarefa (ex.: só "tarefa dia 14/7"), deixe titulo null — NUNCA invente ou use placeholder. VÁRIAS tarefas numa frase só ("tenho que ligar pro X, tirar cópia e levar o cachorro no vet amanhã") => acao "tarefa" com a lista em "tarefas" [{titulo, data}], uma entrada por tarefa; a data dita vale só para a tarefa a que se refere (as demais ficam null = hoje). ACRESCENTAR informação a uma tarefa já existente ("na tarefa do João, o número é 9999", "coloca mais informações na tarefa X: horário 14h, local escritório, cliente Riani") => acao "tarefa_nota" com busca = trecho que identifica a tarefa. Se ele der horário/local/cliente/detalhes, preencha "campos" {horario, local, cliente, detalhes} (só os ditos); informação solta que não é nenhum desses vai em "nota". NUNCA pergunte pelos campos na criação da tarefa — eles só existem quando o usuário pede para acrescentar.
 - "me lembra de X" COM dia/horário definido => acao agendar com lembrete true. Reuniões/consultas => lembrete false.
 - NUNCA invente horário que o usuário não disse — exceto quando ele pediu explicitamente para você escolher (ex.: "no primeiro horário livre"), aí consulte horarios_livres e use o slot real.
 - Mensagem que não é sobre agenda: acao "nada".`;
@@ -37,7 +37,7 @@ When done, ALWAYS call the "concluir" tool exactly once:
 - Calendar questions you answered via tools (availability, "when is X?", conflicts): acao "responder" + "resposta" with the WhatsApp-ready text (short, • for lists).
 - Simple "what do I have today/tomorrow/this week?": acao "resumo" + periodo.
 - Fixed monthly reminder: recorrente true + diaDoMes + titulo.
-- To-do WITHOUT a set time ("I have to call John", "I need to send the document"): acao "tarefa" + short verb-first titulo. Goes to the day's task list, not the calendar. If the user names a DAY ("tomorrow", "on 7/14", "Friday"), fill "data" with YYYY-MM-DD; no day mentioned, data null (= today). If they did NOT say what the task is (e.g. just "task on 7/14"), leave titulo null — NEVER invent or use a placeholder. SEVERAL tasks in one phrase ("I have to call X, copy the doc and take the dog to the vet tomorrow") => acao "tarefa" with the list in "tarefas" [{titulo, data}], one entry per task; a stated day applies only to the task it refers to (others null = today). ADDING info to an existing task ("on the John task, the number is 9999") => acao "tarefa_nota" with busca = snippet identifying the task and nota = the info.
+- To-do WITHOUT a set time ("I have to call John", "I need to send the document"): acao "tarefa" + short verb-first titulo. Goes to the day's task list, not the calendar. If the user names a DAY ("tomorrow", "on 7/14", "Friday"), fill "data" with YYYY-MM-DD; no day mentioned, data null (= today). If they did NOT say what the task is (e.g. just "task on 7/14"), leave titulo null — NEVER invent or use a placeholder. SEVERAL tasks in one phrase ("I have to call X, copy the doc and take the dog to the vet tomorrow") => acao "tarefa" with the list in "tarefas" [{titulo, data}], one entry per task; a stated day applies only to the task it refers to (others null = today). ADDING info to an existing task ("on the John task, the number is 9999", "add more info to task X: time 2pm, place office, client Riani") => acao "tarefa_nota" with busca = snippet identifying the task. If they give time/place/client/details, fill "campos" {horario, local, cliente, detalhes} (only what was said); loose info that fits none goes in "nota". NEVER ask for these fields at task creation — they only exist when the user asks to add info.
 - "remind me to X" WITH a set day/time => acao agendar with lembrete true. Meetings/appointments => lembrete false.
 - NEVER invent a time the user didn't say — unless they explicitly asked you to pick (e.g. "first free slot"); then use horarios_livres and pick a real slot.
 - Not about the calendar: acao "nada".`;
@@ -103,6 +103,16 @@ const TOOLS = [
         },
         resposta: { type: ['string', 'null'], description: 'Texto pronto para o usuário (apenas acao "responder")' },
         nota: { type: ['string', 'null'], description: 'Informação a acrescentar (apenas acao "tarefa_nota"; busca identifica a tarefa)' },
+        campos: {
+          type: ['object', 'null'],
+          description: 'Campos estruturados da tarefa (apenas acao "tarefa_nota"; preencha só o que foi dito)',
+          properties: {
+            horario: { type: ['string', 'null'] },
+            local: { type: ['string', 'null'] },
+            cliente: { type: ['string', 'null'] },
+            detalhes: { type: ['string', 'null'] },
+          },
+        },
       },
       required: ['acao'],
     },
