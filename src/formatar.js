@@ -12,6 +12,13 @@ function isAniversario(evento) {
   return evento.eventType === 'birthday' || /anivers[áa]rio|birthday/i.test(evento.summary ?? '');
 }
 
+export function isLembrete(evento) {
+  return (
+    evento.extendedProperties?.private?.agendaBot === 'lembrete' ||
+    /lembrete|lembrar|cobrar|reminder|remind|chase/i.test(evento.summary ?? '')
+  );
+}
+
 function linhaEvento(evento) {
   const titulo = evento.summary ?? t('event.untitled');
   if (isAniversario(evento)) return `• 🎂 ${titulo}`;
@@ -24,13 +31,34 @@ function linhaEvento(evento) {
   return `• 🕐 ${inicio}${fim ? `–${fim}` : ''} ${titulo}${local}${link}`;
 }
 
-export function resumoDiario(eventos, data, titulo = t('daily.title.morning')) {
+// Resumo segmentado: aniversários no topo, depois compromissos, lembretes
+// e (opcional) as tarefas do dia passadas em tarefasTexto.
+export function resumoDiario(eventos, data, titulo = t('daily.title.morning'), tarefasTexto = null) {
   const dia = fmtDiaSemana.format(data);
-  if (eventos.length === 0) {
+  if (eventos.length === 0 && !tarefasTexto) {
     return t('daily.empty', { title: titulo, day: dia });
   }
-  const linhas = eventos.map(linhaEvento).join('\n');
-  return `${titulo} (${dia}):\n\n${linhas}\n\n${t('daily.total', { n: eventos.length })}`;
+
+  const aniversarios = eventos.filter(isAniversario);
+  const lembretes = eventos.filter((e) => !isAniversario(e) && isLembrete(e));
+  const compromissos = eventos.filter((e) => !isAniversario(e) && !isLembrete(e));
+
+  const blocos = [];
+  if (aniversarios.length) {
+    blocos.push(`${t('daily.sec.birthdays')}\n${aniversarios.map(linhaEvento).join('\n')}`);
+  }
+  if (compromissos.length) {
+    blocos.push(`${t('daily.sec.events')}\n${compromissos.map(linhaEvento).join('\n')}`);
+  }
+  if (lembretes.length) {
+    blocos.push(`${t('daily.sec.reminders')}\n${lembretes.map(linhaEvento).join('\n')}`);
+  }
+  if (tarefasTexto) {
+    blocos.push(`${t('daily.sec.tasks')}\n${tarefasTexto}\n${t('daily.sec.tasks.hint')}`);
+  }
+  if (blocos.length === 0) return t('daily.empty', { title: titulo, day: dia });
+
+  return `${titulo} (${dia}):\n\n${blocos.join('\n\n')}\n\n${t('daily.total', { n: eventos.length })}`;
 }
 
 export function resumoSemanal(eventos, inicioSemana) {

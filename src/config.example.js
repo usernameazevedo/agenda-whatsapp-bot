@@ -26,6 +26,11 @@ export const CONFIG = {
   // Checagem de fim de dia dos lembretes (feito ou posterga)
   cronCheckDia: '0 20 * * *',
 
+  // Nome do grupo do WhatsApp para onde o bot manda tudo (gera notificação,
+  // ao contrário da conversa consigo mesmo). Crie um grupo só seu com esse
+  // nome. Deixe null para usar a conversa consigo mesmo.
+  grupo: process.env.WHATSAPP_GRUPO ?? null,
+
   // IDs extras de chat autorizados (formato novo @lid do WhatsApp).
   // Deixe vazio; se suas mensagens forem ignoradas, o log mostra o ID a adicionar.
   chatsExtras: [],

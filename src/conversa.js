@@ -13,6 +13,8 @@ import { interpretar, gerarTexto } from './ia.js';
 import { interpretarComAgente, agenteDisponivel } from './agente.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
 import { criarRecorrente } from './recorrentes.js';
+import { criarTarefa, tarefasDoDia, pendentesDoDia, marcarFeitaPorId, formatarTarefas } from './tarefas.js';
+import { isLembrete } from './formatar.js';
 import { t, fmtDataHora, fmtHora, fmtDia, ehSim, ehNao } from './i18n.js';
 
 const PENDENCIA_TTL_MIN = 10;
@@ -63,6 +65,13 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   if (!intent || intent.acao === 'nada') return null;
   if (intent.acao === 'responder' && intent.resposta) return intent.resposta;
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
+
+  // tarefa do dia (a fazer sem horário): "tenho que ligar pro fulano", "preciso mandar o documento"
+  if (intent.acao === 'tarefa' && intent.titulo) {
+    criarTarefa(intent.titulo);
+    const lista = formatarTarefas();
+    return t('task.created', { text: intent.titulo, list: lista, n: tarefasDoDia().length });
+  }
 
   // lembrete recorrente mensal insistente (ex.: pagar o cartão dia 10 de todo mês)
   if (intent.recorrente) {
@@ -482,35 +491,44 @@ async function responderReuOutros(texto, pend, auth, key) {
 
 // ─── checagem de fim de dia dos lembretes ────────────────────────────────────
 
-const ehLembrete = (e) =>
-  e.extendedProperties?.private?.agendaBot === 'lembrete' ||
-  /lembrete|lembrar|cobrar|reminder|remind|chase/i.test(e.summary ?? '');
-
-// Monta a checagem do dia; retorna a primeira pergunta ou null se não há lembretes.
+// Monta a checagem do dia (lembretes da agenda + tarefas pendentes de hoje);
+// retorna a primeira pergunta ou null se não há nada a checar.
 export async function dispararCheckDia(auth) {
   limparExpiradas();
   if (pendencias.has(DEFAULT_KEY)) return null; // não interrompe conversa em andamento
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const amanha = new Date(hoje.getTime() + 24 * 60 * 60 * 1000);
-  const fila = (await listarEventos(auth, hoje, amanha))
-    .filter((e) => ehLembrete(e) && !(e.summary ?? '').startsWith('✅'));
+  const lembretes = (await listarEventos(auth, hoje, amanha))
+    .filter((e) => isLembrete(e) && !(e.summary ?? '').startsWith('✅'))
+    .map((e) => ({ tipo: 'evento', evento: e, titulo: e.summary }));
+  const tarefas = pendentesDoDia().map((x) => ({ tipo: 'tarefa', tarefa: x, titulo: x.texto }));
+  const fila = [...lembretes, ...tarefas];
   if (fila.length === 0) return null;
   pendencias.set(DEFAULT_KEY, { fase: 'checkdia', fila, idx: 0, criadoEm: Date.now() });
-  return t('checkdia.start', { n: fila.length, s: fila.length > 1 ? 's' : '', title: fila[0].summary });
+  return t('checkdia.start', { n: fila.length, s: fila.length > 1 ? 's' : '', title: fila[0].titulo });
 }
 
 async function responderCheckDia(texto, pend, auth, key) {
-  const evento = pend.fila[pend.idx];
+  const item = pend.fila[pend.idx];
   let resultado;
   if (ehSim(texto)) {
-    await renomearEvento(auth, evento, `✅ ${evento.summary}`);
-    resultado = t('checkdia.markeddone', { title: evento.summary });
+    if (item.tipo === 'tarefa') {
+      marcarFeitaPorId(item.tarefa.id);
+    } else {
+      await renomearEvento(auth, item.evento, `✅ ${item.evento.summary}`);
+    }
+    resultado = t('checkdia.markeddone', { title: item.titulo });
   } else if (ehNao(texto)) {
-    const novoInicio = new Date(dataDoEvento(evento).getTime() + 24 * 60 * 60 * 1000);
-    await remarcarEvento(auth, evento, novoInicio);
-    resultado = t('checkdia.postponed', { title: evento.summary, when: fmtDataHora.format(novoInicio) });
+    if (item.tipo === 'tarefa') {
+      // fica pendente: amanhã de manhã ela é postergada automaticamente (e o dia de hoje guarda o ❌)
+      resultado = t('task.checkdia.postponed', { title: item.titulo });
+    } else {
+      const novoInicio = new Date(dataDoEvento(item.evento).getTime() + 24 * 60 * 60 * 1000);
+      await remarcarEvento(auth, item.evento, novoInicio);
+      resultado = t('checkdia.postponed', { title: item.titulo, when: fmtDataHora.format(novoInicio) });
+    }
   } else {
-    return t('checkdia.ask', { title: evento.summary });
+    return t('checkdia.ask', { title: item.titulo });
   }
 
   pend.idx += 1;
@@ -520,7 +538,7 @@ async function responderCheckDia(texto, pend, auth, key) {
   }
   pend.criadoEm = Date.now();
   pendencias.set(key, pend);
-  return t('checkdia.next', { result: resultado, title: pend.fila[pend.idx].summary });
+  return t('checkdia.next', { result: resultado, title: pend.fila[pend.idx].titulo });
 }
 
 // Chamado pelo cron diário (09:00): dispara a pergunta de cobrança pendente.

@@ -8,6 +8,7 @@ import { processarComando } from './comandos.js';
 import { dispararCobrancas, dispararCheckDia, dispararFollowupReunioes } from './conversa.js';
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
+import { postergarPendentes, formatarTarefas } from './tarefas.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
@@ -61,8 +62,27 @@ async function enviarPara(chatId, texto) {
   console.log(`[${new Date().toISOString()}] Bot respondeu: ${texto.slice(0, 100).replace(/\n/g, ' | ')}`);
 }
 
+// id do grupo de destino (resolvido no ready); null = conversa consigo mesmo
+let grupoId = null;
+
+async function resolverGrupo() {
+  if (!CONFIG.grupo) return;
+  try {
+    const chats = await whatsapp.getChats();
+    const g = chats.find((c) => c.isGroup && c.name === CONFIG.grupo);
+    if (g) {
+      grupoId = g.id._serialized;
+      console.log(`Mensagens do bot irão para o grupo "${CONFIG.grupo}" (${grupoId}).`);
+    } else {
+      console.warn(`Grupo "${CONFIG.grupo}" não encontrado — usando a conversa própria. Crie o grupo e reinicie.`);
+    }
+  } catch (err) {
+    console.error('Falha ao resolver grupo:', err.message);
+  }
+}
+
 async function enviarMensagem(texto) {
-  await enviarPara(`${CONFIG.destinatario}@c.us`, texto);
+  await enviarPara(grupoId ?? `${CONFIG.destinatario}@c.us`, texto);
 }
 
 async function comSaude(fn) {
@@ -76,8 +96,12 @@ async function comSaude(fn) {
 
 async function executarDiario(auth) {
   const hoje = inicioDoDia(new Date());
+  // postergação automática: pendentes de ontem ganham ❌ no histórico e cópia hoje
+  const movidas = postergarPendentes();
   const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
-  await enviarMensagem(resumoDiario(eventos, hoje));
+  let msg = resumoDiario(eventos, hoje, t('daily.title.morning'), formatarTarefas());
+  if (movidas > 0) msg += `\n${t('task.postponed.auto', { n: movidas })}`;
+  await enviarMensagem(msg);
 }
 
 async function executarSemanal(auth) {
@@ -200,6 +224,7 @@ async function main() {
     aguardandoQr = false;
     falhasSeguidas = 0;
     console.log('WhatsApp conectado.');
+    await resolverGrupo();
 
     const modoTeste = process.argv.indexOf('--now');
     if (modoTeste !== -1) {
@@ -248,8 +273,12 @@ async function main() {
         const chat = await msg.getChat();
         if (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p))) return;
 
-        // conversa "com você mesmo" (formato antigo @c.us ou novo @lid)
-        const isConversaPropria = msg.from === msg.to || chatsAutorizados.has(chat.id._serialized);
+        // conversa "com você mesmo" (formato antigo @c.us ou novo @lid),
+        // ou mensagem SUA no grupo do bot
+        const isConversaPropria =
+          msg.from === msg.to ||
+          chatsAutorizados.has(chat.id._serialized) ||
+          (grupoId && chat.id._serialized === grupoId && msg.fromMe);
 
         // conversa direta com a secretária: só mensagens DELA (não as suas)
         let isSecretaria = false;
