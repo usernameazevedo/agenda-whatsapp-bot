@@ -9,6 +9,7 @@ import { dispararCobrancas, dispararCheckDia, dispararFollowupReunioes } from '.
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
 import { postergarPendentes, formatarTarefas } from './tarefas.js';
+import { transcreverAudio, audioDisponivel } from './audio.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
@@ -280,7 +281,8 @@ async function main() {
     whatsapp.on('message_create', async (msg) => {
       try {
         const chat = await msg.getChat();
-        if (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p))) return;
+        const isAudio = audioDisponivel && (msg.type === 'ptt' || msg.type === 'audio');
+        if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
 
         // conversa "com você mesmo" (formato antigo @c.us ou novo @lid),
         // ou mensagem SUA no grupo do bot
@@ -305,10 +307,26 @@ async function main() {
         }
 
         const origem = isConversaPropria ? 'self' : `sec:${chat.id._serialized}`;
-        console.log(`[${new Date().toISOString()}] Mensagem recebida (${origem}): ${msg.body.slice(0, 60)}`);
-        const resposta = await processarComando(msg.body, auth, origem);
+
+        // mensagem de voz: transcreve localmente e trata como texto
+        let texto = msg.body;
+        let prefixoAudio = '';
+        if (isAudio) {
+          const media = await msg.downloadMedia();
+          if (!media?.data) return;
+          console.log(`[${new Date().toISOString()}] Áudio recebido (${origem}), transcrevendo...`);
+          texto = await transcreverAudio(media.data);
+          if (!texto) {
+            await enviarPara(chat.id._serialized, t('audio.fail'));
+            return;
+          }
+          prefixoAudio = t('audio.heard', { text: texto }) + '\n\n';
+        }
+
+        console.log(`[${new Date().toISOString()}] Mensagem recebida (${origem}): ${texto.slice(0, 60)}`);
+        const resposta = await processarComando(texto, auth, origem);
         if (resposta) {
-          await enviarPara(chat.id._serialized, resposta);
+          await enviarPara(chat.id._serialized, prefixoAudio + resposta);
           // avisa o dono quando a secretária conclui uma ação na agenda
           if (origem !== 'self' && resposta.startsWith('✅')) {
             await enviarMensagem(t('secretary.notice', { msg: resposta.split('\n')[0] }));
