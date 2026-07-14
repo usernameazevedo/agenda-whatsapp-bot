@@ -13,7 +13,7 @@ import { interpretar, gerarTexto } from './ia.js';
 import { interpretarComAgente, agenteDisponivel } from './agente.js';
 import { criarFollowup, paraCobrar, atualizarFollowup } from './followups.js';
 import { criarRecorrente } from './recorrentes.js';
-import { criarTarefa, tarefasDoDia, pendentesDoDia, marcarFeitaPorId, formatarTarefas } from './tarefas.js';
+import { criarTarefa, tarefasDoDia, pendentesDoDia, marcarFeitaPorId, formatarTarefas, hojeStr, dataCurta } from './tarefas.js';
 import { isLembrete } from './formatar.js';
 import { t, fmtDataHora, fmtHora, fmtDia, ehSim, ehNao } from './i18n.js';
 
@@ -68,8 +68,12 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
 
   // tarefa do dia (a fazer sem horário): "tenho que ligar pro fulano", "preciso mandar o documento"
   if (intent.acao === 'tarefa' && intent.titulo) {
-    criarTarefa(intent.titulo);
-    const lista = formatarTarefas();
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(intent.data ?? '') ? intent.data : hojeStr();
+    criarTarefa(intent.titulo, data);
+    const lista = formatarTarefas(data);
+    if (data !== hojeStr()) {
+      return t('task.created.date', { text: intent.titulo, date: dataCurta(data), list: lista });
+    }
     return t('task.created', { text: intent.titulo, list: lista, n: tarefasDoDia().length });
   }
 

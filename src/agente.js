@@ -23,7 +23,7 @@ Ao terminar, chame SEMPRE a ferramenta "concluir" exatamente uma vez com o resul
 - Pergunta sobre a agenda que você já respondeu consultando as ferramentas (disponibilidade, "quando é X?", conflitos): acao "responder" + campo "resposta" com o texto pronto para o WhatsApp (curto, com • para listas).
 - "o que tenho hoje/amanhã/na semana?" simples: acao "resumo" + periodo (o sistema formata).
 - Lembrete mensal fixo ("pagar cartão dia 10 de todo mês"): recorrente true + diaDoMes + titulo.
-- Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento"): acao "tarefa" + titulo curto começando com verbo. Vai para a lista de tarefas do dia, não para a agenda.
+- Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento"): acao "tarefa" + titulo curto começando com verbo. Vai para a lista de tarefas do dia, não para a agenda. Se o usuário disser o DIA ("amanhã", "dia 14/7", "sexta"), preencha "data" com YYYY-MM-DD; sem dia dito, data null (= hoje).
 - "me lembra de X" COM dia/horário definido => acao agendar com lembrete true. Reuniões/consultas => lembrete false.
 - NUNCA invente horário que o usuário não disse — exceto quando ele pediu explicitamente para você escolher (ex.: "no primeiro horário livre"), aí consulte horarios_livres e use o slot real.
 - Mensagem que não é sobre agenda: acao "nada".`;
@@ -37,7 +37,7 @@ When done, ALWAYS call the "concluir" tool exactly once:
 - Calendar questions you answered via tools (availability, "when is X?", conflicts): acao "responder" + "resposta" with the WhatsApp-ready text (short, • for lists).
 - Simple "what do I have today/tomorrow/this week?": acao "resumo" + periodo.
 - Fixed monthly reminder: recorrente true + diaDoMes + titulo.
-- To-do WITHOUT a set time ("I have to call John", "I need to send the document"): acao "tarefa" + short verb-first titulo. Goes to the day's task list, not the calendar.
+- To-do WITHOUT a set time ("I have to call John", "I need to send the document"): acao "tarefa" + short verb-first titulo. Goes to the day's task list, not the calendar. If the user names a DAY ("tomorrow", "on 7/14", "Friday"), fill "data" with YYYY-MM-DD; no day mentioned, data null (= today).
 - "remind me to X" WITH a set day/time => acao agendar with lembrete true. Meetings/appointments => lembrete false.
 - NEVER invent a time the user didn't say — unless they explicitly asked you to pick (e.g. "first free slot"); then use horarios_livres and pick a real slot.
 - Not about the calendar: acao "nada".`;
@@ -88,6 +88,7 @@ const TOOLS = [
         lembrete: { type: 'boolean' },
         recorrente: { type: 'boolean' },
         diaDoMes: { type: ['number', 'null'] },
+        data: { type: ['string', 'null'], description: 'Dia da tarefa, YYYY-MM-DD (apenas acao "tarefa"; null = hoje)' },
         resposta: { type: ['string', 'null'], description: 'Texto pronto para o usuário (apenas acao "responder")' },
       },
       required: ['acao'],

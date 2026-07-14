@@ -9,11 +9,11 @@ export const iaDisponivel = Boolean(API_KEY);
 const SYSTEM_PT = `Você preenche um formulário de agenda a partir de mensagens em português. Data/hora atual: {AGORA} (America/Sao_Paulo, offset -03:00).
 {PENDENTE}
 Responda APENAS o JSON, sem explicação:
-{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|nada","titulo":string|null,"busca":string|null,"inicio":"ISO8601 com -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"checkFrase":string|null}
+{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|nada","titulo":string|null,"busca":string|null,"inicio":"ISO8601 com -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"data":"YYYY-MM-DD"|null,"checkFrase":string|null}
 
 Regras:
 - Lembretes que se repetem TODO MÊS num dia fixo (ex.: "pagar o cartão dia 10 de todo mês", "todo dia 5 me lembra de X", "lembrete mensal") => recorrente true, diaDoMes = número do dia (1-31), titulo = a tarefa (curto). Deixe inicio/fim null.
-- Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento", "não posso esquecer de X") => acao tarefa, titulo = a tarefa (curto, começando com verbo). Vai para a lista de tarefas do dia, não para a agenda.
+- Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento", "não posso esquecer de X") => acao tarefa, titulo = a tarefa (curto, começando com verbo). Vai para a lista de tarefas do dia, não para a agenda. Se o usuário disser o DIA ("amanhã", "dia 14/7", "sexta"), preencha data com YYYY-MM-DD; sem dia dito, data null (= hoje).
 - "me lembra de X" COM dia/horário definido => acao agendar com titulo X e lembrete true. Reuniões/encontros/consultas => lembrete false.
 - "cancela/desmarca X" => acao cancelar com busca X.
 - "muda/altera/remarca/joga X para <quando>" => acao remarcar com busca X e inicio novo.
@@ -25,14 +25,14 @@ Regras:
 const SYSTEM_EN = `You fill a calendar form from English messages. Current date/time: {AGORA} (America/Sao_Paulo, offset -03:00). Output times in ISO8601 with the -03:00 offset.
 {PENDENTE}
 Reply ONLY the JSON, no explanation:
-{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|nada","titulo":string|null,"busca":string|null,"inicio":"ISO8601 with -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"checkFrase":string|null}
+{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|nada","titulo":string|null,"busca":string|null,"inicio":"ISO8601 with -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"data":"YYYY-MM-DD"|null,"checkFrase":string|null}
 
 Field names stay in Portuguese but the meaning is:
 - acao: agendar=schedule, cancelar=cancel, remarcar=reschedule, resumo=summary, livre=free slots, tarefa=to-do task, nada=none.
 - periodo: hoje=today, amanha=tomorrow, semana=week.
 Rules:
 - Reminders that repeat EVERY MONTH on a fixed day ("pay the card day 10 every month", "every 5th remind me of X", "monthly reminder") => recorrente true, diaDoMes = day number (1-31), titulo = the task (short). Leave inicio/fim null.
-- To-do WITHOUT a set time ("I have to call John", "I need to send the document") => acao tarefa, titulo = the task (short, starting with a verb). Goes to the day's task list, not the calendar.
+- To-do WITHOUT a set time ("I have to call John", "I need to send the document") => acao tarefa, titulo = the task (short, starting with a verb). Goes to the day's task list, not the calendar. If the user names a DAY ("tomorrow", "on 7/14", "Friday"), fill data with YYYY-MM-DD; no day mentioned, data null (= today).
 - "remind me to X" WITH a set day/time => acao agendar, titulo X, lembrete true. Meetings/appointments => lembrete false.
 - "cancel X" => acao cancelar, busca X.
 - "move/reschedule X to <when>" => acao remarcar, busca X, new inicio.
