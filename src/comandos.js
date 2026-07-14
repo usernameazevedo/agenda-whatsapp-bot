@@ -4,7 +4,7 @@ import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
 import { conduzirConversa, temPendencia, dispararCheckDia, dispararFollowupReunioes, iniciarRecorrente } from './conversa.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
-import { marcarFeita, formatarTarefas, normalizarData, hojeStr, dataCurta } from './tarefas.js';
+import { marcarFeita, adicionarNota, formatarTarefas, normalizarData, hojeStr, dataCurta } from './tarefas.js';
 import { t, fmtHora, CMD } from './i18n.js';
 
 const emCmd = (lower, chave) => CMD[chave].includes(lower);
@@ -35,6 +35,12 @@ export async function processarComando(texto, auth, origem = 'self') {
         lower.match(/^(\d{1,2})\s*[.\-)]?\s*(feito|feita|done|ok)\b/) ||
         lower.match(/^(?:feito|feita|done)\s+(\d{1,2})\b/);
       if (check) return darCheckTarefa(parseInt(check[1], 10));
+
+      // nota na tarefa: "1. nota levar o RG", "nota 2: ligar depois das 14h"
+      const nota =
+        msg.match(/^(\d{1,2})\s*[.\-)]?\s*(?:nota|obs|info)[:\s]+(.+)/is) ||
+        msg.match(/^(?:nota|obs|info)\s+(\d{1,2})[:\s]+(.+)/is);
+      if (nota) return notaTarefa(parseInt(nota[1], 10), nota[2]);
     }
 
     // "tarefas" (hoje) e "tarefas do dia 01/7" (histórico por data)
@@ -115,6 +121,12 @@ function darCheckTarefa(n) {
   const tarefa = marcarFeita(n);
   if (!tarefa) return t('task.done.badnum', { n });
   return t('task.done', { text: tarefa.texto, list: formatarTarefas() });
+}
+
+function notaTarefa(n, nota) {
+  const tarefa = adicionarNota(n, nota);
+  if (!tarefa) return t('task.done.badnum', { n });
+  return t('task.note.added', { text: tarefa.texto, list: formatarTarefas() });
 }
 
 function listarTarefasMsg(lower) {
