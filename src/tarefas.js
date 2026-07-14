@@ -87,6 +87,35 @@ export function marcarFeitaPorId(id) {
   return atualizada;
 }
 
+// acrescenta uma nota (informação extra) à tarefa nº n do dia
+export function adicionarNota(n, nota, data = hojeStr()) {
+  const doDia = tarefasDoDia(data);
+  const alvo = doDia[n - 1];
+  if (!alvo) return null;
+  const lista = carregar();
+  const idx = lista.findIndex((x) => x.id === alvo.id);
+  const atualizada = { ...lista[idx], notas: [...(lista[idx].notas ?? []), nota.trim()] };
+  salvar([...lista.slice(0, idx), atualizada, ...lista.slice(idx + 1)]);
+  return atualizada;
+}
+
+// busca tarefa não feita (hoje ou futura) cujo texto contém o termo
+export function buscarPendentePorTexto(termo, hoje = hojeStr()) {
+  const alvo = termo.toLowerCase();
+  return carregar()
+    .filter((x) => !x.feito && !x.postergada && x.data >= hoje && x.texto.toLowerCase().includes(alvo))
+    .sort((a, b) => a.data.localeCompare(b.data));
+}
+
+export function adicionarNotaPorId(id, nota) {
+  const lista = carregar();
+  const idx = lista.findIndex((x) => x.id === id);
+  if (idx === -1) return null;
+  const atualizada = { ...lista[idx], notas: [...(lista[idx].notas ?? []), nota.trim()] };
+  salvar([...lista.slice(0, idx), atualizada, ...lista.slice(idx + 1)]);
+  return atualizada;
+}
+
 // Move as pendentes de dias anteriores para hoje: a original vira "postergada"
 // (aparece com ❌ no histórico) e uma cópia nasce no dia de hoje.
 export function postergarPendentes(hoje = hojeStr()) {
@@ -103,6 +132,7 @@ export function postergarPendentes(hoje = hojeStr()) {
     nova.push({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
       texto: x.texto,
+      notas: x.notas ?? [],
       data: hoje,
       feito: false,
       feitoEm: null,
@@ -128,7 +158,8 @@ export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {
   const linhas = doDia.map((x, i) => {
     const icone = x.feito ? '✅' : historico || x.postergada ? '❌' : '⬜';
     const sufixo = !x.feito && x.postergada ? ` ${t('task.postponed.tag')}` : '';
-    return `${i + 1}. ${icone} ${x.texto}${sufixo}`;
+    const notas = (x.notas ?? []).map((nota) => `\n   ↳ ${nota}`).join('');
+    return `${i + 1}. ${icone} ${x.texto}${sufixo}${notas}`;
   });
   return linhas.join('\n');
 }
