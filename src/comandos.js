@@ -4,6 +4,7 @@ import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
 import { conduzirConversa, temPendencia, dispararCheckDia, dispararFollowupReunioes, iniciarRecorrente } from './conversa.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
+import { marcarFeita, formatarTarefas, normalizarData, hojeStr, dataCurta } from './tarefas.js';
 import { t, fmtHora, CMD } from './i18n.js';
 
 const emCmd = (lower, chave) => CMD[chave].includes(lower);
@@ -26,6 +27,19 @@ export async function processarComando(texto, auth, origem = 'self') {
     if (origem === 'self') {
       const quitado = tentarCheck(msg);
       if (quitado) return t('rec.check.done', { title: quitado.titulo });
+    }
+
+    // check de tarefa: "1. feito", "2 feito", "feito 3", "1. done"
+    if (origem === 'self') {
+      const check =
+        lower.match(/^(\d{1,2})\s*[.\-)]?\s*(feito|feita|done|ok)\b/) ||
+        lower.match(/^(?:feito|feita|done)\s+(\d{1,2})\b/);
+      if (check) return darCheckTarefa(parseInt(check[1], 10));
+    }
+
+    // "tarefas" (hoje) e "tarefas do dia 01/7" (histórico por data)
+    if (origem === 'self' && CMD.tarefas.some((c) => lower === c || lower.startsWith(c + ' '))) {
+      return listarTarefasMsg(lower);
     }
 
     if (emCmd(lower, 'manual')) return t('manual');
@@ -71,7 +85,7 @@ async function resumo(periodo, auth) {
     return resumoDiario(await listarEventos(auth, inicio, fim), inicio, t('daily.title.tomorrow'));
   }
   const { inicio, fim } = janela(1);
-  return resumoDiario(await listarEventos(auth, inicio, fim), inicio);
+  return resumoDiario(await listarEventos(auth, inicio, fim), inicio, undefined, formatarTarefas());
 }
 
 async function horariosLivres(auth) {
@@ -95,6 +109,30 @@ async function horariosLivres(auth) {
   if (livres.length === 0) return t('free.full');
   const linhas = livres.map(([a, b]) => `• ${fmtHora.format(a)} – ${fmtHora.format(b)}`).join('\n');
   return t('free.header', { lines: linhas });
+}
+
+function darCheckTarefa(n) {
+  const tarefa = marcarFeita(n);
+  if (!tarefa) return t('task.done.badnum', { n });
+  return t('task.done', { text: tarefa.texto, list: formatarTarefas() });
+}
+
+function listarTarefasMsg(lower) {
+  // extrai uma data no fim do comando ("tarefas do dia 01/7", "tarefas 01/07/2026")
+  const mData = lower.match(/(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{4}-\d{2}-\d{2})\s*$/);
+  if (mData) {
+    const data = normalizarData(mData[1]);
+    if (!data) return t('task.list.baddate');
+    const lista = formatarTarefas(data, { historico: true });
+    if (!lista) return t('task.list.empty', { date: dataCurta(data) });
+    return t('task.list.date', { date: dataCurta(data), list: lista });
+  }
+  if (lower.replace(/^tarefas|^tasks|^todo|^to-do|de hoje|do dia/g, '').trim() !== '') {
+    return t('task.list.baddate');
+  }
+  const lista = formatarTarefas();
+  if (!lista) return t('task.list.empty', { date: dataCurta(hojeStr()) });
+  return t('task.list.today', { date: dataCurta(hojeStr()), list: lista });
 }
 
 function listarRecorrentesMsg() {

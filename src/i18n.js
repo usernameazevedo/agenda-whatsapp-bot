@@ -47,6 +47,7 @@ export const CMD = {
   agendas: ['agendas', 'calendars'],
   checagem: ['checagem', 'check'],
   reunioes: ['reuniões', 'reunioes', 'meetings'],
+  tarefas: ['tarefas', 'tarefas de hoje', 'tasks', 'todo', 'to-do'],
 };
 
 const DICT = {
@@ -59,6 +60,23 @@ const DICT = {
     'event.allday': '(dia inteiro)',
     'daily.empty': '{title} ({day}): agenda livre, nenhum compromisso. 🎉',
     'daily.total': 'Total: {n} compromisso(s).',
+    'daily.sec.birthdays': '*🎂 Aniversários*',
+    'daily.sec.events': '*📅 Compromissos*',
+    'daily.sec.reminders': '*🔔 Lembretes*',
+    'daily.sec.tasks': '*📝 Tarefas do dia*',
+    'daily.sec.tasks.hint': '_Para dar baixa: "1. feito"_',
+
+    // tarefas
+    'task.created': '✅ Tarefa anotada para hoje: *{text}*\n\n📝 *Tarefas do dia:*\n{list}\n\n_Dê baixa com "{n}. feito"_',
+    'task.done': '✅ Feita: *{text}*\n\n📝 *Tarefas do dia:*\n{list}',
+    'task.done.badnum': 'Não achei a tarefa nº {n} de hoje. Manda *tarefas* para ver a lista numerada.',
+    'task.list.today': '📝 *Tarefas de hoje ({date}):*\n{list}\n\n_Dê baixa com "1. feito"_',
+    'task.list.date': '📝 *Tarefas do dia {date}:*\n{list}',
+    'task.list.empty': 'Nenhuma tarefa anotada em {date}.',
+    'task.list.baddate': 'Não entendi a data. Ex.: *tarefas do dia 01/7*',
+    'task.postponed.tag': '_(postergada p/ o dia seguinte)_',
+    'task.postponed.auto': '📌 {n} tarefa(s) pendente(s) foram postergadas para hoje.',
+    'task.checkdia.postponed': '❌ "{title}" fica pendente e passa automaticamente para amanhã.',
     'week.empty': '🗓️ *Resumo da semana*\n\nSemana livre, nenhum compromisso agendado. 🎉',
     'week.title': '🗓️ *Resumo da semana* ({n} compromissos):',
     'week.birthdays': '*🎉 Aniversários da semana:*',
@@ -189,6 +207,13 @@ Aviso 2 dias antes, 1 dia antes e no dia de hora em hora.
 Para parar: mande *"paguei"* ou *"feito cartão"*.
 • *recorrentes* — lista · _remover recorrente 1_ — apaga
 
+📝 *TAREFAS DO DIA*
+Fale a tarefa sem hora que ela entra na lista de hoje:
+• _tenho que ligar pro João_ · _preciso mandar o contrato_
+• *tarefas* — lista de hoje · *"1. feito"* — dá o check ✅
+• _tarefas do dia 01/7_ — histórico com ✅/❌
+Não feita no dia? Ganha ❌ e passa sozinha para o dia seguinte.
+
 👀 *CONSULTAR* (sem confirmação)
 • *hoje* · *amanhã* · *semana* · *livre*
 
@@ -207,6 +232,23 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
     'event.allday': '(all day)',
     'daily.empty': '{title} ({day}): all clear, nothing scheduled. 🎉',
     'daily.total': 'Total: {n} event(s).',
+    'daily.sec.birthdays': '*🎂 Birthdays*',
+    'daily.sec.events': '*📅 Events*',
+    'daily.sec.reminders': '*🔔 Reminders*',
+    'daily.sec.tasks': '*📝 Today\'s tasks*',
+    'daily.sec.tasks.hint': '_To check off: "1. done"_',
+
+    // tasks
+    'task.created': '✅ Task noted for today: *{text}*\n\n📝 *Today\'s tasks:*\n{list}\n\n_Check off with "{n}. done"_',
+    'task.done': '✅ Done: *{text}*\n\n📝 *Today\'s tasks:*\n{list}',
+    'task.done.badnum': "Couldn't find today's task #{n}. Send *tasks* to see the numbered list.",
+    'task.list.today': "📝 *Today's tasks ({date}):*\n{list}\n\n_Check off with \"1. done\"_",
+    'task.list.date': '📝 *Tasks for {date}:*\n{list}',
+    'task.list.empty': 'No tasks noted on {date}.',
+    'task.list.baddate': "Couldn't parse the date. E.g.: *tasks 07/01*",
+    'task.postponed.tag': '_(moved to the next day)_',
+    'task.postponed.auto': '📌 {n} pending task(s) were moved to today.',
+    'task.checkdia.postponed': '❌ "{title}" stays pending and automatically moves to tomorrow.',
     'week.empty': '🗓️ *Week summary*\n\nClear week, nothing scheduled. 🎉',
     'week.title': '🗓️ *Week summary* ({n} events):',
     'week.birthdays': '*🎉 Birthdays this week:*',
@@ -326,6 +368,13 @@ For fixed monthly bills. Type *monthly* or send it complete:
 I nudge 2 days before, 1 day before, and hourly on the day.
 To stop: send *"paid"* or *"done card"*.
 • *recurring* — list · _remove recurring 1_ — delete
+
+📝 *DAILY TASKS*
+Say a task with no time and it joins today's list:
+• _I have to call John_ · _I need to send the contract_
+• *tasks* — today's list · *"1. done"* — checks it off ✅
+• _tasks 07/01_ — history with ✅/❌
+Not done today? It gets ❌ and moves itself to tomorrow.
 
 👀 *QUERY* (no confirmation)
 • *today* · *tomorrow* · *week* · *free*
