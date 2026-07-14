@@ -75,19 +75,26 @@ const nomeNormalizado = (s) =>
     .toLowerCase();
 
 async function resolverGrupo() {
-  if (!CONFIG.grupo) return;
+  if (!CONFIG.grupo && !CONFIG.grupoId) return;
   try {
-    const chats = await whatsapp.getChats();
-    const alvo = nomeNormalizado(CONFIG.grupo);
-    const g = chats.find((c) => c.isGroup && (c.name === CONFIG.grupo || nomeNormalizado(c.name) === alvo));
-    if (g) {
-      grupoId = g.id._serialized;
-      console.log(`Mensagens do bot irão para o grupo "${CONFIG.grupo}" (${grupoId}).`);
-    } else {
-      console.warn(`Grupo "${CONFIG.grupo}" não encontrado — usando a conversa própria. Crie o grupo e reinicie.`);
+    if (CONFIG.grupo) {
+      const chats = await whatsapp.getChats();
+      const alvo = nomeNormalizado(CONFIG.grupo);
+      const g = chats.find((c) => c.isGroup && (c.name === CONFIG.grupo || nomeNormalizado(c.name) === alvo));
+      if (g) {
+        grupoId = g.id._serialized;
+        console.log(`Mensagens do bot irão para o grupo "${CONFIG.grupo}" (${grupoId}).`);
+        return;
+      }
     }
   } catch (err) {
-    console.error('Falha ao resolver grupo:', err.message);
+    console.error('Falha ao resolver grupo por nome:', err.message);
+  }
+  if (CONFIG.grupoId) {
+    grupoId = CONFIG.grupoId;
+    console.log(`Mensagens do bot irão para o grupo pelo ID fixo (${grupoId}).`);
+  } else {
+    console.warn(`Grupo "${CONFIG.grupo}" não encontrado — usando a conversa própria.`);
   }
 }
 
@@ -280,7 +287,10 @@ async function main() {
     const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨'];
     whatsapp.on('message_create', async (msg) => {
       try {
-        const chat = await msg.getChat();
+        // id do chat derivado da própria mensagem (msg.getChat() está quebrado
+        // em algumas versões do WhatsApp Web — evitamos depender dele)
+        const chatId = msg.fromMe ? msg.to : msg.from;
+        const isGroup = chatId.endsWith('@g.us');
         const isAudio = audioDisponivel && (msg.type === 'ptt' || msg.type === 'audio');
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
 
@@ -288,25 +298,27 @@ async function main() {
         // ou mensagem SUA no grupo do bot
         const isConversaPropria =
           msg.from === msg.to ||
-          chatsAutorizados.has(chat.id._serialized) ||
-          (grupoId && chat.id._serialized === grupoId && msg.fromMe);
+          chatsAutorizados.has(chatId) ||
+          (grupoId && chatId === grupoId && msg.fromMe);
 
         // conversa direta com a secretária: só mensagens DELA (não as suas)
         let isSecretaria = false;
-        if (!isConversaPropria && !msg.fromMe && !chat.isGroup && CONFIG.secretaria) {
-          isSecretaria = (CONFIG.secretariaChats ?? []).includes(chat.id._serialized);
+        if (!isConversaPropria && !msg.fromMe && !isGroup && CONFIG.secretaria) {
+          isSecretaria =
+            (CONFIG.secretariaChats ?? []).includes(chatId) ||
+            msg.from === `${CONFIG.secretaria}@c.us`;
           if (!isSecretaria) {
             const contato = await msg.getContact().catch(() => null);
-            isSecretaria = contato?.number === CONFIG.secretaria || msg.from === `${CONFIG.secretaria}@c.us`;
+            isSecretaria = contato?.number === CONFIG.secretaria;
           }
         }
 
         if (!isConversaPropria && !isSecretaria) {
-          console.log(`[msg ignorada] chat=${chat.id._serialized} from=${msg.from} to=${msg.to}`);
+          console.log(`[msg ignorada] chat=${chatId} from=${msg.from} to=${msg.to}`);
           return;
         }
 
-        const origem = isConversaPropria ? 'self' : `sec:${chat.id._serialized}`;
+        const origem = isConversaPropria ? 'self' : `sec:${chatId}`;
 
         // mensagem de voz: transcreve localmente e trata como texto
         let texto = msg.body;
@@ -317,7 +329,7 @@ async function main() {
           console.log(`[${new Date().toISOString()}] Áudio recebido (${origem}), transcrevendo...`);
           texto = await transcreverAudio(media.data);
           if (!texto) {
-            await enviarPara(chat.id._serialized, t('audio.fail'));
+            await enviarPara(chatId, t('audio.fail'));
             return;
           }
           prefixoAudio = t('audio.heard', { text: texto }) + '\n\n';
@@ -326,7 +338,7 @@ async function main() {
         console.log(`[${new Date().toISOString()}] Mensagem recebida (${origem}): ${texto.slice(0, 60)}`);
         const resposta = await processarComando(texto, auth, origem);
         if (resposta) {
-          await enviarPara(chat.id._serialized, prefixoAudio + resposta);
+          await enviarPara(chatId, prefixoAudio + resposta);
           // avisa o dono quando a secretária conclui uma ação na agenda
           if (origem !== 'self' && resposta.startsWith('✅')) {
             await enviarMensagem(t('secretary.notice', { msg: resposta.split('\n')[0] }));
@@ -335,8 +347,7 @@ async function main() {
       } catch (err) {
         console.error('Erro ao processar comando:', err.message);
         try {
-          const chat = await msg.getChat();
-          await enviarPara(chat.id._serialized, t('err.exec', { err: err.message }));
+          await enviarPara(msg.fromMe ? msg.to : msg.from, t('err.exec', { err: err.message }));
         } catch {}
       }
     });
