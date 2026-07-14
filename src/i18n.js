@@ -68,6 +68,7 @@ const DICT = {
 
     // tarefas
     'task.created': '✅ Tarefa anotada para hoje: *{text}*\n\n📝 *Tarefas do dia:*\n{list}\n\n_Dê baixa com "{n}. feito"_',
+    'task.created.date': '✅ Tarefa anotada para {date}: *{text}*\n\n📝 *Tarefas de {date}:*\n{list}\n\n_Ela aparece no resumo desse dia._',
     'task.done': '✅ Feita: *{text}*\n\n📝 *Tarefas do dia:*\n{list}',
     'task.done.badnum': 'Não achei a tarefa nº {n} de hoje. Manda *tarefas* para ver a lista numerada.',
     'task.list.today': '📝 *Tarefas de hoje ({date}):*\n{list}\n\n_Dê baixa com "1. feito"_',
@@ -240,6 +241,7 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
 
     // tasks
     'task.created': '✅ Task noted for today: *{text}*\n\n📝 *Today\'s tasks:*\n{list}\n\n_Check off with "{n}. done"_',
+    'task.created.date': "✅ Task noted for {date}: *{text}*\n\n📝 *Tasks for {date}:*\n{list}\n\n_It shows up in that day's summary._",
     'task.done': '✅ Done: *{text}*\n\n📝 *Today\'s tasks:*\n{list}',
     'task.done.badnum': "Couldn't find today's task #{n}. Send *tasks* to see the numbered list.",
     'task.list.today': "📝 *Today's tasks ({date}):*\n{list}\n\n_Check off with \"1. done\"_",
