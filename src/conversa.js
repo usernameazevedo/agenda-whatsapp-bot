@@ -67,14 +67,14 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
 
   // tarefa do dia (a fazer sem horário): "tenho que ligar pro fulano", "preciso mandar o documento"
-  if (intent.acao === 'tarefa' && intent.titulo) {
+  if (intent.acao === 'tarefa') {
     const data = /^\d{4}-\d{2}-\d{2}$/.test(intent.data ?? '') ? intent.data : hojeStr();
-    criarTarefa(intent.titulo, data);
-    const lista = formatarTarefas(data);
-    if (data !== hojeStr()) {
-      return t('task.created.date', { text: intent.titulo, date: dataCurta(data), list: lista });
+    const titulo = tituloValido(intent.titulo);
+    if (!titulo) {
+      pendencias.set(key, { fase: 'tarefa_texto', data, criadoEm: Date.now() });
+      return t('task.ask.what', { date: dataCurta(data) });
     }
-    return t('task.created', { text: intent.titulo, list: lista, n: tarefasDoDia().length });
+    return criarTarefaMsg(titulo, data);
   }
 
   // lembrete recorrente mensal insistente (ex.: pagar o cartão dia 10 de todo mês)
@@ -112,6 +112,7 @@ async function responderPendencia(texto, pend, auth, key) {
   if (pend.fase === 'reu_entrega') return responderReuEntrega(texto, pend, auth, key);
   if (pend.fase === 'reu_tipo') return responderReuTipo(texto, pend, auth, key);
   if (pend.fase === 'reu_outros') return responderReuOutros(texto, pend, auth, key);
+  if (pend.fase === 'tarefa_texto') return responderTarefaTexto(texto, pend, key);
 
   if (ehNao(texto)) {
     pendencias.delete(key);
@@ -146,6 +147,33 @@ async function responderPendencia(texto, pend, auth, key) {
   const intent = await interpretar(texto, pend.dados);
   if (intent) mesclar(pend.dados, intent);
   return avancar(pend, auth, key);
+}
+
+// rejeita títulos vazios ou placeholders inventados pelo modelo
+function tituloValido(titulo) {
+  const s = (titulo ?? '').trim();
+  if (!s || /^<?\s*(unknown|null|undefined|n\/a|tarefa|task)\s*>?$/i.test(s)) return null;
+  return s;
+}
+
+function criarTarefaMsg(titulo, data) {
+  criarTarefa(titulo, data);
+  const lista = formatarTarefas(data);
+  if (data !== hojeStr()) {
+    return t('task.created.date', { text: titulo, date: dataCurta(data), list: lista });
+  }
+  return t('task.created', { text: titulo, list: lista, n: tarefasDoDia().length });
+}
+
+function responderTarefaTexto(texto, pend, key) {
+  if (ehNao(texto)) {
+    pendencias.delete(key);
+    return t('discard.generic');
+  }
+  const titulo = tituloValido(texto);
+  if (!titulo) return t('task.ask.what', { date: dataCurta(pend.data) }); // pendência continua
+  pendencias.delete(key);
+  return criarTarefaMsg(titulo, pend.data);
 }
 
 function mesclar(dados, intent) {
