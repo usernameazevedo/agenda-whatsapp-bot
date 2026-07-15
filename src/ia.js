@@ -9,7 +9,7 @@ export const iaDisponivel = Boolean(API_KEY);
 const SYSTEM_PT = `Você preenche um formulário de agenda a partir de mensagens em português. Data/hora atual: {AGORA} (America/Sao_Paulo, offset -03:00).
 {PENDENTE}
 Responda APENAS o JSON, sem explicação:
-{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|tarefa_nota|nada","titulo":string|null,"busca":string|null,"nota":string|null,"inicio":"ISO8601 com -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"data":"YYYY-MM-DD"|null,"tarefas":[{"titulo":string,"data":"YYYY-MM-DD"|null}]|null,"checkFrase":string|null}
+{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|tarefa_nota|orcamento_enviado|nada","titulo":string|null,"busca":string|null,"nota":string|null,"inicio":"ISO8601 com -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"data":"YYYY-MM-DD"|null,"tarefas":[{"titulo":string,"data":"YYYY-MM-DD"|null}]|null,"checkFrase":string|null}
 
 Regras:
 - Lembretes que se repetem TODO MÊS num dia fixo (ex.: "pagar o cartão dia 10 de todo mês", "todo dia 5 me lembra de X", "lembrete mensal") => recorrente true, diaDoMes = número do dia (1-31), titulo = a tarefa (curto). Deixe inicio/fim null.
@@ -20,12 +20,13 @@ Regras:
 - Perguntas sobre a agenda ("o que tenho hoje?") => acao resumo com periodo.
 - Se houver formulário pendente, a mensagem do usuário provavelmente responde a ele: preserve os campos já preenchidos e complete apenas com a informação nova (ex.: "15h" preenche inicio; "termina 16h" preenche fim; "1h" ou "meia hora" define fim a partir do inicio).
 - NUNCA invente horário que o usuário não disse. Se não foi dito, deixe null.
+- Aviso de orçamento/proposta enviada ("orçamento do Lucas enviado", "orçamento Lucas ok") => acao orcamento_enviado, titulo = cliente (ou null).
 - acao "nada" apenas quando a mensagem claramente não é sobre agenda.`;
 
 const SYSTEM_EN = `You fill a calendar form from English messages. Current date/time: {AGORA} (America/Sao_Paulo, offset -03:00). Output times in ISO8601 with the -03:00 offset.
 {PENDENTE}
 Reply ONLY the JSON, no explanation:
-{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|tarefa_nota|nada","titulo":string|null,"busca":string|null,"nota":string|null,"inicio":"ISO8601 with -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"data":"YYYY-MM-DD"|null,"tarefas":[{"titulo":string,"data":"YYYY-MM-DD"|null}]|null,"checkFrase":string|null}
+{"acao":"agendar|cancelar|remarcar|resumo|livre|tarefa|tarefa_nota|orcamento_enviado|nada","titulo":string|null,"busca":string|null,"nota":string|null,"inicio":"ISO8601 with -03:00"|null,"fim":"ISO8601"|null,"periodo":"hoje"|"amanha"|"semana"|null,"lembrete":boolean,"recorrente":boolean,"diaDoMes":number|null,"data":"YYYY-MM-DD"|null,"tarefas":[{"titulo":string,"data":"YYYY-MM-DD"|null}]|null,"checkFrase":string|null}
 
 Field names stay in Portuguese but the meaning is:
 - acao: agendar=schedule, cancelar=cancel, remarcar=reschedule, resumo=summary, livre=free slots, tarefa=to-do task, nada=none.
@@ -39,6 +40,7 @@ Rules:
 - Questions about the agenda ("what do I have today?") => acao resumo with periodo.
 - If there is a pending form, the message likely answers it: keep filled fields and add only the new info ("3pm" fills inicio; "ends 4pm" fills fim; "1h" sets fim from inicio).
 - NEVER invent a time the user didn't say. If unsaid, leave null.
+- Report of a sent quote ("Lucas quote sent") => acao orcamento_enviado, titulo = client (or null).
 - acao "nada" only when clearly not about the calendar.`;
 
 const SYSTEM = LOCALE === 'en' ? SYSTEM_EN : SYSTEM_PT;

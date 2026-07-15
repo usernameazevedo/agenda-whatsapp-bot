@@ -66,6 +66,22 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   if (intent.acao === 'responder' && intent.resposta) return intent.resposta;
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
 
+  // registro de orçamento enviado → oferece cobrança automática de retorno
+  if (intent.acao === 'orcamento_enviado') {
+    const cliente = tituloValido(intent.titulo);
+    if (!cliente) {
+      pendencias.set(key, { fase: 'orc_cliente', criadoEm: Date.now() });
+      return t('orc.ask.client');
+    }
+    pendencias.set(key, {
+      fase: 'followup_dias',
+      cliente,
+      dataEnvio: new Date().toISOString(),
+      criadoEm: Date.now(),
+    });
+    return t('orc.registered', { client: cliente });
+  }
+
   // acrescenta informação a uma tarefa existente: nota livre e/ou campos
   // estruturados (horário, local, cliente, detalhes) — só quando pedido
   const temCampos = intent.campos && Object.values(intent.campos).some((v) => (v ?? '').toString().trim());
@@ -141,6 +157,7 @@ async function responderPendencia(texto, pend, auth, key) {
   if (pend.fase === 'reu_tipo') return responderReuTipo(texto, pend, auth, key);
   if (pend.fase === 'reu_outros') return responderReuOutros(texto, pend, auth, key);
   if (pend.fase === 'tarefa_texto') return responderTarefaTexto(texto, pend, key);
+  if (pend.fase === 'orc_cliente') return responderOrcCliente(texto, pend, key);
 
   if (ehNao(texto)) {
     pendencias.delete(key);
@@ -204,6 +221,22 @@ function responderTarefaTexto(texto, pend, key) {
   if (!titulo) return t('task.ask.what', { date: dataCurta(pend.data) }); // pendência continua
   pendencias.delete(key);
   return criarTarefaMsg(titulo, pend.data);
+}
+
+function responderOrcCliente(texto, pend, key) {
+  if (ehNao(texto)) {
+    pendencias.delete(key);
+    return t('discard.generic');
+  }
+  const cliente = tituloValido(texto);
+  if (!cliente) return t('orc.ask.client');
+  pendencias.set(key, {
+    fase: 'followup_dias',
+    cliente,
+    dataEnvio: new Date().toISOString(),
+    criadoEm: Date.now(),
+  });
+  return t('orc.registered', { client: cliente });
 }
 
 function mesclar(dados, intent) {

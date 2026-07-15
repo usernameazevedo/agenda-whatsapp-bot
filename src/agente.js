@@ -26,6 +26,7 @@ Ao terminar, chame SEMPRE a ferramenta "concluir" exatamente uma vez com o resul
 - Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento"): acao "tarefa" + titulo curto começando com verbo. Vai para a lista de tarefas do dia, não para a agenda. Se o usuário disser o DIA ("amanhã", "dia 14/7", "sexta"), preencha "data" com YYYY-MM-DD; sem dia dito, data null (= hoje). Se ele NÃO disse qual é a tarefa (ex.: só "tarefa dia 14/7"), deixe titulo null — NUNCA invente ou use placeholder. VÁRIAS tarefas numa frase só ("tenho que ligar pro X, tirar cópia e levar o cachorro no vet amanhã") => acao "tarefa" com a lista em "tarefas" [{titulo, data}], uma entrada por tarefa; a data dita vale só para a tarefa a que se refere (as demais ficam null = hoje). ACRESCENTAR informação a uma tarefa já existente ("na tarefa do João, o número é 9999", "coloca mais informações na tarefa X: horário 14h, local escritório, cliente Riani") => acao "tarefa_nota" com busca = trecho que identifica a tarefa. Se ele der horário/local/cliente/detalhes, preencha "campos" {horario, local, cliente, detalhes} (só os ditos); informação solta que não é nenhum desses vai em "nota". NUNCA pergunte pelos campos na criação da tarefa — eles só existem quando o usuário pede para acrescentar.
 - "me lembra de X" COM dia/horário definido => acao agendar com lembrete true. Reuniões/consultas => lembrete false.
 - NUNCA invente horário que o usuário não disse — exceto quando ele pediu explicitamente para você escolher (ex.: "no primeiro horário livre"), aí consulte horarios_livres e use o slot real.
+- Usuário AVISA que enviou um orçamento/proposta ("orçamento do Lucas enviado", "mandei o orçamento pra Riani", "orçamento Lucas ok") => acao "orcamento_enviado" com titulo = nome do cliente. Sem cliente identificável, titulo null.
 - Mensagem que não é sobre agenda: acao "nada".`;
 
 const SYSTEM_EN = `You are the user's calendar assistant (Google Calendar) on WhatsApp. Current date/time: {AGORA} (America/Sao_Paulo, offset -03:00). Always output times in ISO8601 with -03:00.
@@ -40,6 +41,7 @@ When done, ALWAYS call the "concluir" tool exactly once:
 - To-do WITHOUT a set time ("I have to call John", "I need to send the document"): acao "tarefa" + short verb-first titulo. Goes to the day's task list, not the calendar. If the user names a DAY ("tomorrow", "on 7/14", "Friday"), fill "data" with YYYY-MM-DD; no day mentioned, data null (= today). If they did NOT say what the task is (e.g. just "task on 7/14"), leave titulo null — NEVER invent or use a placeholder. SEVERAL tasks in one phrase ("I have to call X, copy the doc and take the dog to the vet tomorrow") => acao "tarefa" with the list in "tarefas" [{titulo, data}], one entry per task; a stated day applies only to the task it refers to (others null = today). ADDING info to an existing task ("on the John task, the number is 9999", "add more info to task X: time 2pm, place office, client Riani") => acao "tarefa_nota" with busca = snippet identifying the task. If they give time/place/client/details, fill "campos" {horario, local, cliente, detalhes} (only what was said); loose info that fits none goes in "nota". NEVER ask for these fields at task creation — they only exist when the user asks to add info.
 - "remind me to X" WITH a set day/time => acao agendar with lembrete true. Meetings/appointments => lembrete false.
 - NEVER invent a time the user didn't say — unless they explicitly asked you to pick (e.g. "first free slot"); then use horarios_livres and pick a real slot.
+- User REPORTS having sent a quote ("Lucas quote sent", "sent the proposal to Riani") => acao "orcamento_enviado" with titulo = client name. No identifiable client, titulo null.
 - Not about the calendar: acao "nada".`;
 
 const TOOLS = [
@@ -79,7 +81,7 @@ const TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        acao: { type: 'string', enum: ['agendar', 'cancelar', 'remarcar', 'resumo', 'livre', 'tarefa', 'tarefa_nota', 'responder', 'nada'] },
+        acao: { type: 'string', enum: ['agendar', 'cancelar', 'remarcar', 'resumo', 'livre', 'tarefa', 'tarefa_nota', 'orcamento_enviado', 'responder', 'nada'] },
         titulo: { type: ['string', 'null'] },
         busca: { type: ['string', 'null'], description: 'Termo para localizar o evento (cancelar/remarcar)' },
         inicio: { type: ['string', 'null'], description: 'ISO8601 com -03:00' },
