@@ -25,6 +25,23 @@ const REGEX_ORCAMENTO = /or[çc]ament|proposta|quote|proposal/i;
 const DEFAULT_KEY = 'self';
 const pendencias = new Map();
 
+// memória curta da conversa: últimas mensagens viram contexto para a IA
+// (permite "marca o dentista com essas informações" após encaminhar algo)
+const HISTORICO_MAX = 6;
+const HISTORICO_TTL_MIN = 30;
+const historicos = new Map();
+
+function contextoRecente(key) {
+  const corte = Date.now() - HISTORICO_TTL_MIN * 60 * 1000;
+  return (historicos.get(key) ?? []).filter((m) => m.em > corte).map((m) => m.texto);
+}
+
+function lembrarMensagem(key, texto) {
+  const corte = Date.now() - HISTORICO_TTL_MIN * 60 * 1000;
+  const arr = [...(historicos.get(key) ?? []).filter((m) => m.em > corte), { texto, em: Date.now() }];
+  historicos.set(key, arr.slice(-HISTORICO_MAX));
+}
+
 const dataDoEvento = (e) => new Date(e.start?.dateTime ?? `${e.start?.date}T12:00:00`);
 const linhaCandidato = (e, i) => `(${i + 1}) ${e.summary} — ${fmtDataHora.format(dataDoEvento(e))}`;
 
@@ -53,10 +70,12 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
 
   // mensagem nova: agente com ferramentas (consulta a agenda antes de decidir);
   // se falhar, cai no interpretador simples
+  const contexto = contextoRecente(key);
+  lembrarMensagem(key, texto);
   let intent = null;
   if (agenteDisponivel) {
     try {
-      intent = await interpretarComAgente(texto, auth);
+      intent = await interpretarComAgente(texto, auth, contexto);
     } catch (err) {
       console.error('Agente falhou, usando interpretador simples:', err.message);
     }

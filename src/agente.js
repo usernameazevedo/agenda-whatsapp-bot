@@ -187,14 +187,19 @@ async function chamarAPI(body) {
 // Interpreta a mensagem podendo consultar a agenda. Retorna a intenção
 // (mesmo formato de ia.interpretar, mais acao "responder" + resposta),
 // ou null se a IA está desativada.
-export async function interpretarComAgente(texto, auth) {
+export async function interpretarComAgente(texto, auth, contexto = []) {
   if (!API_KEY) return null;
 
   const system = (LOCALE === 'en' ? SYSTEM_EN : SYSTEM_PT).replace(
     '{AGORA}',
     new Date().toLocaleString(LOCALE === 'en' ? 'en-US' : 'pt-BR', { timeZone: 'America/Sao_Paulo' })
   );
-  const messages = [{ role: 'user', content: texto }];
+  // mensagens recentes do usuário como contexto — a atual pode referenciá-las
+  // ("marca o dentista com essas informações" após encaminhar uma confirmação)
+  const conteudo = contexto.length
+    ? `Mensagens anteriores do usuário nesta conversa (da mais antiga à mais recente; a mensagem atual pode se referir a elas):\n${contexto.map((c) => `- ${c}`).join('\n')}\n\nMensagem atual: ${texto}`
+    : texto;
+  const messages = [{ role: 'user', content: conteudo }];
 
   for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
     const data = await chamarAPI({
