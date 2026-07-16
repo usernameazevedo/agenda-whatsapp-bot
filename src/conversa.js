@@ -38,8 +38,9 @@ function contextoRecente(key) {
 
 function lembrarMensagem(key, texto) {
   const corte = Date.now() - HISTORICO_TTL_MIN * 60 * 1000;
-  const arr = [...(historicos.get(key) ?? []).filter((m) => m.em > corte), { texto, em: Date.now() }];
-  historicos.set(key, arr.slice(-HISTORICO_MAX));
+  const atuais = (historicos.get(key) ?? []).filter((m) => m.em > corte);
+  if (atuais[atuais.length - 1]?.texto === texto) return; // reentrada da mesma mensagem
+  historicos.set(key, [...atuais, { texto, em: Date.now() }].slice(-HISTORICO_MAX));
 }
 
 const dataDoEvento = (e) => new Date(e.start?.dateTime ?? `${e.start?.date}T12:00:00`);
@@ -66,12 +67,13 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   limparExpiradas();
   const pend = pendencias.get(key) ?? null;
 
+  const contexto = contextoRecente(key);
+  lembrarMensagem(key, texto); // toda mensagem vira contexto, mesmo respondendo pendência
+
   if (pend) return responderPendencia(texto, pend, auth, key);
 
   // mensagem nova: agente com ferramentas (consulta a agenda antes de decidir);
   // se falhar, cai no interpretador simples
-  const contexto = contextoRecente(key);
-  lembrarMensagem(key, texto);
   let intent = null;
   if (agenteDisponivel) {
     try {
@@ -164,7 +166,18 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   return avancar(novo, auth, key);
 }
 
+// filas de pergunta (reuniões/checagem/follow-up) não podem sequestrar um pedido
+// novo: mensagem longa que não é uma resposta válida pausa a fila e segue normal
+const FASES_FILA = ['reu_entrega', 'reu_tipo', 'checkdia', 'followup_dias', 'followup_resposta'];
+const pareceResposta = (t2) => ehSim(t2) || ehNao(t2) || /^\d{1,2}\b/.test(t2.trim());
+
 async function responderPendencia(texto, pend, auth, key) {
+  if (FASES_FILA.includes(pend.fase) && texto.trim().length > 12 && !pareceResposta(texto)) {
+    pendencias.delete(key);
+    const resposta = await conduzirConversa(texto, auth, key);
+    if (typeof resposta === 'string') return `${t('queue.paused')}\n\n${resposta}`;
+    return resposta ?? t('queue.paused');
+  }
   // fases de follow-up e checagem têm regras próprias
   if (pend.fase === 'followup_dias') return responderFollowupDias(texto, pend, key);
   if (pend.fase === 'followup_resposta') return responderFollowupResposta(texto, pend, auth, key);
