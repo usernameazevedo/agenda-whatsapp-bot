@@ -87,6 +87,11 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   if (intent.acao === 'responder' && intent.resposta) return intent.resposta;
   if (intent.acao === 'resumo' || intent.acao === 'livre') return { atalho: intent };
 
+  // conclusão por nome: "Gravação Hugo, feito" → dá baixa em tarefa ou evento de hoje
+  if (intent.acao === 'concluir') {
+    return concluirPorNome(tituloValido(intent.busca ?? intent.titulo), auth);
+  }
+
   // registro de orçamento enviado → oferece cobrança automática de retorno
   if (intent.acao === 'orcamento_enviado') {
     const cliente = tituloValido(intent.titulo);
@@ -253,6 +258,46 @@ function responderTarefaTexto(texto, pend, key) {
   if (!titulo) return t('task.ask.what', { date: dataCurta(pend.data) }); // pendência continua
   pendencias.delete(key);
   return criarTarefaMsg(titulo, pend.data);
+}
+
+// todas as palavras relevantes da busca aparecem no texto? ("gravação hugo" acha "Gravação com o Hugo")
+function contemPalavras(textoAlvo, busca) {
+  const alvo = textoAlvo.toLowerCase();
+  const palavras = busca.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  return palavras.length > 0 && palavras.every((w) => alvo.includes(w));
+}
+
+async function concluirPorNome(busca, auth) {
+  const hojePendentes = pendentesDoDia();
+
+  // "feito"/"ok" sem dizer o quê: resolve sozinho se só há uma pendência
+  if (!busca) {
+    if (hojePendentes.length === 1) {
+      marcarFeitaPorId(hojePendentes[0].id);
+      return t('task.done', { text: hojePendentes[0].texto, list: formatarTarefas() });
+    }
+    const lista = formatarTarefas();
+    return lista ? t('done.which', { list: lista }) : t('done.nonepending');
+  }
+
+  // 1) tarefas pendentes (hoje, por palavras; depois qualquer dia, por trecho)
+  const tarefa = hojePendentes.find((x) => contemPalavras(x.texto, busca)) ?? buscarPendentePorTexto(busca)[0];
+  if (tarefa) {
+    marcarFeitaPorId(tarefa.id);
+    return t('task.done', { text: tarefa.texto, list: formatarTarefas(tarefa.data) });
+  }
+
+  // 2) eventos de hoje na agenda
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const amanha = new Date(hoje.getTime() + 24 * 60 * 60 * 1000);
+  const evento = (await listarEventos(auth, hoje, amanha))
+    .find((e) => !(e.summary ?? '').startsWith('✅') && contemPalavras(e.summary ?? '', busca));
+  if (evento) {
+    await renomearEvento(auth, evento, `✅ ${evento.summary}`);
+    return t('checkdia.markeddone', { title: evento.summary });
+  }
+
+  return t('done.notfound', { q: busca });
 }
 
 function responderOrcCliente(texto, pend, key) {
