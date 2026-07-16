@@ -12,6 +12,7 @@ import { postergarPendentes, formatarTarefas } from './tarefas.js';
 import { transcreverAudio, audioDisponivel } from './audio.js';
 import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
 import { diagnosticarAutomacoes } from './diagnostico.js';
+import { verificacaoDiaria } from './verificacao.js';
 import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
@@ -286,6 +287,11 @@ async function main() {
       ].join('\n\n');
       const briefing = await gerarBriefing(contexto);
       if (briefing) await enviarMensagem(briefing);
+    }), opts);
+    // verificação diária das 6h: saúde do app + uma melhoria por dia (MELHORIAS.md)
+    cron.schedule('0 6 * * *', () => comSaude(async () => {
+      const msg = await verificacaoDiaria();
+      if (msg) await enviarMensagem(msg);
     }), opts);
     // diagnóstico diário das automações do Mac (só avisa se algo quebrou)
     cron.schedule('0 8 * * *', () => comSaude(async () => {
