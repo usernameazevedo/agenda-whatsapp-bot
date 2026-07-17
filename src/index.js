@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import qrcode from 'qrcode-terminal';
 import pkg from 'whatsapp-web.js';
+import puppeteer from 'puppeteer';
 import { CONFIG } from './config.js';
 import { getAuthClient, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
@@ -22,7 +23,9 @@ const whatsapp = new Client({
   authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
   puppeteer: {
     headless: true,
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    // Chromium do Puppeteer, não o Chrome do sistema: evita que a instância
+    // headless do bot bloqueie a abertura do Chrome normal no Dock
+    executablePath: puppeteer.executablePath(),
     args: ['--no-sandbox'],
   },
 });
