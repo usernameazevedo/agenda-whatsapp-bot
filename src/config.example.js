@@ -26,6 +26,9 @@ export const CONFIG = {
   // Checagem de fim de dia dos lembretes (feito ou posterga)
   cronCheckDia: '0 20 * * *',
 
+  // Follow-up pós-reunião (pergunta como foi a reunião do dia)
+  cronReunioes: '0 18 * * 1-5',
+
   // Nome do grupo do WhatsApp para onde o bot manda tudo (gera notificação,
   // ao contrário da conversa consigo mesmo). Crie um grupo só seu com esse
   // nome. Deixe null para usar a conversa consigo mesmo.
