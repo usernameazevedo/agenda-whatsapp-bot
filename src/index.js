@@ -266,29 +266,34 @@ async function main() {
     setInterval(() => processarOutbox().catch(() => {}), 30000);
     const opts = { timezone: CONFIG.timezone };
     // agendamento tolerante: expressão ausente/inválida no config.js não pode
-    // derrubar o handler de ready (mataria os agendamentos seguintes e os comandos)
-    const agendar = (nome, expr, fn) => {
+    // derrubar o handler de ready (mataria os agendamentos seguintes e os comandos).
+    // Chave ausente cai no padrão; só desativa (com aviso) se for inválida mesmo.
+    const agendar = (nome, expr, padrao, fn) => {
+      if (!expr && padrao) {
+        console.warn(`[cron] "${nome}" sem expressão no src/config.js — usando padrão ${padrao}`);
+        expr = padrao;
+      }
       if (!expr || !cron.validate(expr)) {
         console.warn(`[cron] "${nome}" desativado: expressão ausente ou inválida (${expr ?? 'undefined'}) — defina no src/config.js`);
         return;
       }
       cron.schedule(expr, fn, opts);
     };
-    agendar('diario', CONFIG.cronDiario, () => comSaude(() => executarDiario(auth)));
-    agendar('semanal', CONFIG.cronSemanal, () => comSaude(() => executarSemanal(auth)));
-    agendar('noturno', CONFIG.cronNoturno, () => comSaude(() => executarNoturno(auth)));
-    agendar('lembretes', '* * * * *', () => comSaude(() => verificarLembretes(auth, enviarMensagem)));
-    agendar('followup', CONFIG.cronFollowup, () => comSaude(() => dispararCobrancas(enviarMensagem)));
-    agendar('reunioes', CONFIG.cronReunioes, () => comSaude(async () => {
+    agendar('diario', CONFIG.cronDiario, '0 7 * * *', () => comSaude(() => executarDiario(auth)));
+    agendar('semanal', CONFIG.cronSemanal, '0 7 * * 1', () => comSaude(() => executarSemanal(auth)));
+    agendar('noturno', CONFIG.cronNoturno, '0 21 * * *', () => comSaude(() => executarNoturno(auth)));
+    agendar('lembretes', '* * * * *', null, () => comSaude(() => verificarLembretes(auth, enviarMensagem)));
+    agendar('followup', CONFIG.cronFollowup, '0 9 * * *', () => comSaude(() => dispararCobrancas(enviarMensagem)));
+    agendar('reunioes', CONFIG.cronReunioes, '0 18 * * 1-5', () => comSaude(async () => {
       const pergunta = await dispararFollowupReunioes(auth);
       if (pergunta) await enviarMensagem(pergunta);
     }));
-    agendar('checkDia', CONFIG.cronCheckDia, () => comSaude(async () => {
+    agendar('checkDia', CONFIG.cronCheckDia, '0 20 * * *', () => comSaude(async () => {
       const pergunta = await dispararCheckDia(auth);
       if (pergunta) await enviarMensagem(pergunta);
     }));
     // briefing matinal inteligente (Claude analisa agenda + tarefas + followups)
-    agendar('briefing', '10 7 * * 1-6', () => comSaude(async () => {
+    agendar('briefing', '10 7 * * 1-6', null, () => comSaude(async () => {
       const hoje = inicioDoDia(new Date());
       const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
       const contexto = [
@@ -301,17 +306,17 @@ async function main() {
       if (briefing) await enviarMensagem(briefing);
     }));
     // verificação diária das 6h: saúde do app + uma melhoria por dia (MELHORIAS.md)
-    agendar('verificacao', '0 6 * * *', () => comSaude(async () => {
+    agendar('verificacao', '0 6 * * *', null, () => comSaude(async () => {
       const msg = await verificacaoDiaria();
       if (msg) await enviarMensagem(msg);
     }));
     // diagnóstico diário das automações do Mac (só avisa se algo quebrou)
-    agendar('diagnostico', '0 8 * * *', () => comSaude(async () => {
+    agendar('diagnostico', '0 8 * * *', null, () => comSaude(async () => {
       const alerta = await diagnosticarAutomacoes();
       if (alerta) await enviarMensagem(alerta);
     }));
     // lembretes recorrentes insistentes: verifica no início de cada hora
-    agendar('recorrentes', '0 * * * *', () => comSaude(async () => {
+    agendar('recorrentes', '0 * * * *', null, () => comSaude(async () => {
       const hora = horaAgora();
       for (const msg of lembretesParaAgora(hora)) await enviarMensagem(msg);
     }));
