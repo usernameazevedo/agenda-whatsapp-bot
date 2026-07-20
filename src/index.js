@@ -333,6 +333,7 @@ async function main() {
         // id do chat derivado da própria mensagem (msg.getChat() está quebrado
         // em algumas versões do WhatsApp Web — evitamos depender dele)
         const chatId = msg.fromMe ? msg.to : msg.from;
+        if (chatId === 'status@broadcast') return; // Status de contatos: ignora sem poluir o log
         const isGroup = chatId.endsWith('@g.us');
         const isAudio = audioDisponivel && (msg.type === 'ptt' || msg.type === 'audio');
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
