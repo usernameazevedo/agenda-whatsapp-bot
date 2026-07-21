@@ -261,10 +261,15 @@ async function processarOutboxInterno() {
     try {
       let chatId;
       if (item.grupo) {
+        // comparação tolerante: ignora maiúsculas/minúsculas e espaços nas pontas
+        const mesmoNome = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
         if (!gruposCache) gruposCache = await listarGrupos();
-        let g = gruposCache.find((c) => c.name === item.grupo);
-        if (!g) { gruposCache = await listarGrupos(); g = gruposCache.find((c) => c.name === item.grupo); }
-        if (!g) throw new Error(`grupo "${item.grupo}" não encontrado`);
+        let g = gruposCache.find((c) => mesmoNome(c.name, item.grupo));
+        if (!g) { gruposCache = await listarGrupos(); g = gruposCache.find((c) => mesmoNome(c.name, item.grupo)); }
+        if (!g) {
+          console.error(`outbox: grupos visíveis: ${gruposCache.map((c) => c.name).join(' | ')}`);
+          throw new Error(`grupo "${item.grupo}" não encontrado`);
+        }
         chatId = g.id;
       } else if (item.para) {
         chatId = `${item.para}@c.us`;
