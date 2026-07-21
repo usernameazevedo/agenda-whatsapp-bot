@@ -161,8 +161,45 @@ let conectado = false;
 let falhasSeguidas = 0;
 let aguardandoQr = false; // sessão expirada: precisa de ação humana, reiniciar não resolve
 
+// registro de queda: persiste início e motivo para avisar no WhatsApp ao reconectar
+const DOWNTIME = new URL('../downtime.json', import.meta.url).pathname;
+
+function registrarQueda(motivo) {
+  try {
+    let reg = null;
+    try { reg = JSON.parse(fs.readFileSync(DOWNTIME, 'utf8')); } catch { /* primeira queda */ }
+    const agora = new Date().toISOString();
+    reg = reg?.inicio
+      ? { ...reg, motivo, reinicios: (reg.reinicios ?? 0) + 1 }
+      : { inicio: agora, motivo, reinicios: 1 };
+    fs.writeFileSync(DOWNTIME, JSON.stringify(reg, null, 1));
+  } catch (err) {
+    console.error('Falha ao registrar queda:', err.message);
+  }
+}
+
+async function avisarRecuperacao() {
+  let reg;
+  try { reg = JSON.parse(fs.readFileSync(DOWNTIME, 'utf8')); } catch { return; }
+  try { fs.unlinkSync(DOWNTIME); } catch {}
+  if (!reg?.inicio) return;
+  const fmt = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: CONFIG.timezone, hour12: false });
+  const minutos = Math.max(1, Math.round((Date.now() - new Date(reg.inicio).getTime()) / 60000));
+  const texto =
+    `⚠️ *Bot ficou fora do ar* por ~${minutos} min\n` +
+    `De ${fmt(reg.inicio)} até ${fmt(new Date().toISOString())}\n` +
+    `Motivo: ${reg.motivo}${reg.reinicios > 1 ? ` (${reg.reinicios} reinícios até recuperar)` : ''}\n\n` +
+    `Mensagens recebidas nesse período NÃO foram processadas — reenvie pedidos feitos nesse intervalo.`;
+  try {
+    await enviarMensagem(texto);
+  } catch (err) {
+    console.error('Falha ao enviar aviso de recuperação:', err.message);
+  }
+}
+
 async function reiniciarLimpo(motivo) {
   console.error(`[watchdog] ${motivo} — reiniciando para recuperar.`);
+  registrarQueda(motivo);
   notificarMac('Agenda WhatsApp', t('notif.recover', { r: motivo }));
   try {
     await whatsapp.destroy();
@@ -258,6 +295,7 @@ async function main() {
     falhasSeguidas = 0;
     console.log('WhatsApp conectado.');
     await resolverGrupo();
+    await avisarRecuperacao();
 
     const modoTeste = process.argv.indexOf('--now');
     if (modoTeste !== -1) {
@@ -451,6 +489,7 @@ for (const sinal of ['SIGINT', 'SIGTERM']) {
 
 main().catch((err) => {
   console.error('Erro fatal:', err.message);
+  registrarQueda(`erro fatal: ${err.message}`);
   notificarMac('Agenda WhatsApp', `Serviço parou: ${err.message}`);
   process.exit(1);
 });
