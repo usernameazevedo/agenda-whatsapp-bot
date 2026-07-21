@@ -80,15 +80,25 @@ const nomeNormalizado = (s) =>
     .replace(/[^a-z0-9]/gi, '')
     .toLowerCase();
 
+// getChats() quebrou com "Error: r" após atualização do WhatsApp Web (jul/2026);
+// lê a lista de grupos direto do Store da página, sem a serialização da lib
+async function listarGrupos() {
+  return whatsapp.pupPage.evaluate(() =>
+    window.require('WAWebCollections').Chat.getModelsArray()
+      .filter((c) => c.isGroup ?? c.id?.server === 'g.us')
+      .map((c) => ({ id: c.id._serialized, name: c.formattedTitle ?? c.name ?? '' }))
+  );
+}
+
 async function resolverGrupo() {
   if (!CONFIG.grupo && !CONFIG.grupoId) return;
   try {
     if (CONFIG.grupo) {
-      const chats = await whatsapp.getChats();
+      const chats = await listarGrupos();
       const alvo = nomeNormalizado(CONFIG.grupo);
-      const g = chats.find((c) => c.isGroup && (c.name === CONFIG.grupo || nomeNormalizado(c.name) === alvo));
+      const g = chats.find((c) => c.name === CONFIG.grupo || nomeNormalizado(c.name) === alvo);
       if (g) {
-        grupoId = g.id._serialized;
+        grupoId = g.id;
         console.log(`Mensagens do bot irão para o grupo "${CONFIG.grupo}" (${grupoId}).`);
         return;
       }
@@ -214,11 +224,11 @@ async function processarOutboxInterno() {
     try {
       let chatId;
       if (item.grupo) {
-        if (!gruposCache) gruposCache = await whatsapp.getChats();
-        let g = gruposCache.find((c) => c.isGroup && c.name === item.grupo);
-        if (!g) { gruposCache = await whatsapp.getChats(); g = gruposCache.find((c) => c.isGroup && c.name === item.grupo); }
+        if (!gruposCache) gruposCache = await listarGrupos();
+        let g = gruposCache.find((c) => c.name === item.grupo);
+        if (!g) { gruposCache = await listarGrupos(); g = gruposCache.find((c) => c.name === item.grupo); }
         if (!g) throw new Error(`grupo "${item.grupo}" não encontrado`);
-        chatId = g.id._serialized;
+        chatId = g.id;
       } else if (item.para) {
         chatId = `${item.para}@c.us`;
       } else {
