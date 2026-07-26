@@ -45,9 +45,7 @@ export const CMD = {
   semana: ['semana', 'week'],
   livre: ['livre', 'livre?', 'free', 'free?'],
   agendas: ['agendas', 'calendars'],
-  checagem: ['checagem', 'check'],
-  reunioes: ['reuniões', 'reunioes', 'meetings'],
-  tarefas: ['tarefas', 'tarefas de hoje', 'tasks', 'todo', 'to-do'],
+  tarefas: ['lista', 'tarefas', 'tarefas de hoje', 'list', 'tasks', 'todo', 'to-do'],
 };
 
 const DICT = {
@@ -74,7 +72,6 @@ const DICT = {
     'task.today.word': 'hoje',
     'task.note.added': '✅ Anotado em *{text}*:\n\n📝\n{list}',
     'task.note.notfound': 'Não achei tarefa pendente com "{q}". As de hoje:\n{list}\n\nPara anotar por número: _1. nota <texto>_',
-    'queue.paused': '⏸️ Deixei a pergunta pendente de lado por enquanto (mande *reuniões* ou *checagem* para retomar).',
     'done.which': 'Feito o quê? As pendências de hoje:\n{list}\n\n_Responde com o nome ("gravação feito") ou "1. feito"_',
     'done.nonepending': 'Não achei nenhuma pendência aberta hoje. ✅',
     'done.notfound': 'Não achei tarefa ou compromisso de hoje parecido com "{q}". Manda *tarefas* ou *hoje* para conferir.',
@@ -90,7 +87,6 @@ const DICT = {
     'task.list.baddate': 'Não entendi a data. Ex.: *tarefas do dia 01/7*',
     'task.postponed.tag': '_(postergada p/ o dia seguinte)_',
     'task.postponed.auto': '📌 {n} tarefa(s) pendente(s) foram postergadas para hoje.',
-    'task.checkdia.postponed': '❌ "{title}" fica pendente e passa automaticamente para amanhã.',
     'week.empty': '🗓️ *Resumo da semana*\n\nSemana livre, nenhum compromisso agendado. 🎉',
     'week.title': '🗓️ *Resumo da semana* ({n} compromissos):',
     'week.birthdays': '*🎉 Aniversários da semana:*',
@@ -128,16 +124,13 @@ const DICT = {
     // follow-up
     'followup.no': 'Ok, sem cobrança automática.',
     'followup.askdays': 'Responde com o número de dias (ex.: 3), ou N para não cobrar.',
-    'followup.set': '✅ Combinado. Em {n} dia{s} eu pergunto se houve retorno.',
-    'followup.closed': '✅ Ótimo, follow-up encerrado.',
-    'followup.reminderset': '✅ Criei um lembrete de cobrança para hoje às {time}.\nQuer que eu sugira um texto de cobrança? (S/N)',
-    'followup.askreturn': 'Houve retorno sobre "{client}"? Responde S ou N.',
-    'followup.ok': 'Ok.',
-    'followup.draft': 'Sugestão de texto:\n\n{text}',
-    'followup.draftfail': 'Não consegui gerar o texto agora, tenta de novo mais tarde.',
+    'followup.set': '✅ Combinado. Em {n} dia{s} a cobrança entra na sua lista do dia.',
     'followup.chase.title': 'Cobrar retorno: {client}',
-    'followup.due': 'Já teve retorno sobre "{client}"? (S/N)',
-    'ia.chase.prompt': 'Escreva uma mensagem curta e educada de WhatsApp, em português do Brasil, cobrando gentilmente o retorno de um cliente sobre este orçamento enviado: "{client}". Tom profissional e direto, sem assinatura. Responda apenas o texto da mensagem.',
+
+    // fechamento do dia (junto da prévia noturna)
+    'closing.header': '📋 *Fechamento do dia*\n{list}\n\n{note}',
+    'closing.pending': '📌 {n} não feita(s) passam para amanhã.',
+    'closing.alldone': 'Tudo feito hoje. 🎉',
 
     // recorrentes (criação)
     'rec.ask.both': 'O que lembrar e em que dia do mês? (ex.: _pagar cartão dia 10_)',
@@ -160,27 +153,7 @@ const DICT = {
     'rec.remove.bad': 'Número inválido. Manda *recorrentes* para ver a lista.',
     'rec.removed': '✅ Removido: *{title}* (todo dia {day}).',
 
-    // follow-up de reuniões (fim do dia)
-    'reu.entrega': '📋 Reunião "{title}": ficou algo pra entregar? (1) sim (2) não',
-    'reu.tipo': 'O que ficou? (1) orçamento (2) marcar fotógrafo/filmmaker (3) outros',
-    'reu.outros': 'Escreve o que foi:',
-    'reu.ask12': 'Responde 1 (sim) ou 2 (não).',
-    'reu.ask123': 'Responde 1, 2 ou 3.',
-    'reu.created': '✅ Anotei "{task}" para {day}.',
-    'reu.finished': 'Follow-up das reuniões concluído. ✅',
-    'reu.none': 'Nenhuma reunião hoje. ✅',
-    'reu.task.orcamento': 'Orçamento — {meeting}',
-    'reu.task.foto': 'Marcar fotógrafo/filmmaker — {meeting}',
-    'reu.task.outros': '{text} — {meeting}',
-
-    // checagem de fim de dia
-    'checkdia.start': 'Checagem do dia ({n} lembrete{s}):\n"{title}" foi feito? (S/N — N posterga para amanhã)',
     'checkdia.markeddone': '✅ "{title}" marcado como feito.',
-    'checkdia.postponed': '✅ "{title}" postergado para {when}.',
-    'checkdia.ask': '"{title}" foi feito? Responde S ou N.',
-    'checkdia.finished': '{result}\nChecagem do dia concluída.',
-    'checkdia.next': '{result}\n\n"{title}" foi feito? (S/N)',
-    'checkdia.none': 'Nenhum lembrete pendente hoje. ✅',
 
     // comandos gerais
     'no.ai': '🤖 O modo de conversa precisa da chave da API configurada. Use os comandos: *hoje*, *semana*, *livre*, *ajuda*.',
@@ -221,19 +194,21 @@ Aviso 2 dias antes, 1 dia antes e no dia de hora em hora.
 Para parar: mande *"paguei"* ou *"feito cartão"*.
 • *recorrentes* — lista · _remover recorrente 1_ — apaga
 
-📝 *TAREFAS DO DIA*
+📝 *LISTA DO DIA*
 Fale a tarefa sem hora que ela entra na lista de hoje:
 • _tenho que ligar pro João_ · _preciso mandar o contrato_
-• *tarefas* — lista de hoje · *"1. feito"* — dá o check ✅
+• *lista* — mostra a lista de hoje numerada
+• *"ok 1"* ou *"1 feito"* — dá o check ✅
 • _tarefas do dia 01/7_ — histórico com ✅/❌
-Não feita no dia? Ganha ❌ e passa sozinha para o dia seguinte.
+Às 21:00 chega o fechamento do dia (✅ feito / ❌ não feito);
+o que não foi feito passa sozinho para o dia seguinte.
 
 👀 *CONSULTAR* (sem confirmação)
 • *hoje* · *amanhã* · *semana* · *livre*
 
-⚙️ *AUTOMÁTICO*: resumo 07:00, semana seg 07:00, follow-up de reuniões 19:00, checagem 20:00, prévia 21:00, lembrete 15min antes.
+⚙️ *AUTOMÁTICO*: resumo 07:00, semana seg 07:00, fechamento + prévia 21:00, lembrete 15min antes.
 
-🔧 *OUTROS*: *reuniões* · *checagem* · *agendas* · *start* (este manual)
+🔧 *OUTROS*: *agendas* · *start* (este manual)
 
 Dica: nas confirmações, responda só *S* ou *N*. 😉`,
   },
@@ -260,7 +235,6 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
     'task.today.word': 'today',
     'task.note.added': '✅ Noted on *{text}*:\n\n📝\n{list}',
     'task.note.notfound': 'No pending task matching "{q}". Today\'s:\n{list}\n\nTo note by number: _1. note <text>_',
-    'queue.paused': '⏸️ Set the pending question aside for now (send *meetings* or *check* to resume).',
     'done.which': "Done with what? Today's open items:\n{list}\n\n_Reply with the name (\"recording done\") or \"1. done\"_",
     'done.nonepending': 'No open items today. ✅',
     'done.notfound': 'Found no task or event today matching "{q}". Send *tasks* or *today* to check.',
@@ -276,7 +250,6 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
     'task.list.baddate': "Couldn't parse the date. E.g.: *tasks 07/01*",
     'task.postponed.tag': '_(moved to the next day)_',
     'task.postponed.auto': '📌 {n} pending task(s) were moved to today.',
-    'task.checkdia.postponed': '❌ "{title}" stays pending and automatically moves to tomorrow.',
     'week.empty': '🗓️ *Week summary*\n\nClear week, nothing scheduled. 🎉',
     'week.title': '🗓️ *Week summary* ({n} events):',
     'week.birthdays': '*🎉 Birthdays this week:*',
@@ -309,16 +282,13 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
 
     'followup.no': 'Ok, no automatic chasing.',
     'followup.askdays': 'Reply with the number of days (e.g.: 3), or N to skip.',
-    'followup.set': "✅ Got it. In {n} day{s} I'll ask if you heard back.",
-    'followup.closed': '✅ Great, follow-up closed.',
-    'followup.reminderset': "✅ I created a chase reminder for today at {time}.\nWant me to draft a follow-up message? (Y/N)",
-    'followup.askreturn': 'Did you hear back about "{client}"? Reply Y or N.',
-    'followup.ok': 'Ok.',
-    'followup.draft': 'Suggested message:\n\n{text}',
-    'followup.draftfail': "Couldn't generate the text right now, try again later.",
+    'followup.set': "✅ Got it. In {n} day{s} the chase joins your daily list.",
     'followup.chase.title': 'Chase reply: {client}',
-    'followup.due': 'Did you hear back about "{client}"? (Y/N)',
-    'ia.chase.prompt': 'Write a short, polite WhatsApp message in English gently following up with a client about this quote sent: "{client}". Professional and direct tone, no signature. Reply only the message text.',
+
+    // day closing (with the nightly preview)
+    'closing.header': '📋 *Day closing*\n{list}\n\n{note}',
+    'closing.pending': '📌 {n} not done — moving to tomorrow.',
+    'closing.alldone': 'Everything done today. 🎉',
 
     'rec.ask.both': 'What to remind and on which day of the month? (e.g.: _pay card day 10_)',
     'rec.ask.title': 'And what do you want to be reminded of on that day?',
@@ -339,26 +309,7 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
     'rec.remove.bad': 'Invalid number. Send *recurring* to see the list.',
     'rec.removed': '✅ Removed: *{title}* (every day {day}).',
 
-    // meeting follow-up (end of day)
-    'reu.entrega': '📋 Meeting "{title}": anything to deliver afterwards? (1) yes (2) no',
-    'reu.tipo': 'What was it? (1) quote (2) book photographer/filmmaker (3) other',
-    'reu.outros': 'Type what it was:',
-    'reu.ask12': 'Reply 1 (yes) or 2 (no).',
-    'reu.ask123': 'Reply 1, 2 or 3.',
-    'reu.created': '✅ Noted "{task}" for {day}.',
-    'reu.finished': 'Meeting follow-up complete. ✅',
-    'reu.none': 'No meetings today. ✅',
-    'reu.task.orcamento': 'Quote — {meeting}',
-    'reu.task.foto': 'Book photographer/filmmaker — {meeting}',
-    'reu.task.outros': '{text} — {meeting}',
-
-    'checkdia.start': "End-of-day check ({n} reminder{s}):\nWas \"{title}\" done? (Y/N — N moves it to tomorrow)",
     'checkdia.markeddone': '✅ "{title}" marked as done.',
-    'checkdia.postponed': '✅ "{title}" moved to {when}.',
-    'checkdia.ask': 'Was "{title}" done? Reply Y or N.',
-    'checkdia.finished': '{result}\nEnd-of-day check complete.',
-    'checkdia.next': '{result}\n\nWas "{title}" done? (Y/N)',
-    'checkdia.none': 'No pending reminders today. ✅',
 
     'no.ai': '🤖 Conversation mode needs the API key configured. Use the commands: *today*, *week*, *free*, *help*.',
     'not.understood': "🤔 Got your message, but I couldn't identify a calendar request. Type *help* to see what I can do.",
@@ -397,19 +348,21 @@ I nudge 2 days before, 1 day before, and hourly on the day.
 To stop: send *"paid"* or *"done card"*.
 • *recurring* — list · _remove recurring 1_ — delete
 
-📝 *DAILY TASKS*
+📝 *DAILY LIST*
 Say a task with no time and it joins today's list:
 • _I have to call John_ · _I need to send the contract_
-• *tasks* — today's list · *"1. done"* — checks it off ✅
+• *list* — today's numbered list
+• *"ok 1"* or *"1 done"* — checks it off ✅
 • _tasks 07/01_ — history with ✅/❌
-Not done today? It gets ❌ and moves itself to tomorrow.
+At 9pm you get the day closing (✅ done / ❌ not done);
+whatever's not done moves itself to tomorrow.
 
 👀 *QUERY* (no confirmation)
 • *today* · *tomorrow* · *week* · *free*
 
-⚙️ *AUTOMATIC*: summary 7am, week Mon 7am, meeting follow-up 7pm, check 8pm, preview 9pm, reminder 15min before.
+⚙️ *AUTOMATIC*: summary 7am, week Mon 7am, closing + preview 9pm, reminder 15min before.
 
-🔧 *OTHER*: *meetings* · *check* · *calendars* · *start* (this manual)
+🔧 *OTHER*: *calendars* · *start* (this manual)
 
 Tip: on confirmations, just reply *Y* or *N*. 😉`,
   },

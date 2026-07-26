@@ -169,6 +169,16 @@ export function dataCurta(data) {
   return `${d}/${m}`;
 }
 
+// Fechamento do dia: lista com ✅ feito / ❌ não feito e contagem de pendentes
+// (as não feitas passam automaticamente para amanhã no cron diário).
+export function fechamentoDoDia(data = hojeStr()) {
+  const doDia = tarefasDoDia(data);
+  if (doDia.length === 0) return null;
+  const linhas = doDia.map((x) => `${x.feito ? '✅' : '❌'} ${x.texto}`);
+  const pendentes = doDia.filter((x) => !x.feito).length;
+  return { lista: linhas.join('\n'), pendentes };
+}
+
 // Lista do dia. historico=true mostra ✅/❌ (visão de auditoria por data);
 // historico=false mostra ✅/⬜ (lista de trabalho de hoje, com números para dar check).
 export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {

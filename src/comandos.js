@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { listarCalendarios, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
-import { conduzirConversa, temPendencia, dispararCheckDia, dispararFollowupReunioes, iniciarRecorrente } from './conversa.js';
+import { conduzirConversa, temPendencia, iniciarRecorrente } from './conversa.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
 import { marcarFeita, adicionarNota, formatarTarefas, normalizarData, hojeStr, dataCurta } from './tarefas.js';
 import { t, fmtHora, CMD } from './i18n.js';
@@ -29,11 +29,12 @@ export async function processarComando(texto, auth, origem = 'self') {
       if (quitado) return t('rec.check.done', { title: quitado.titulo });
     }
 
-    // check de tarefa: "1. feito", "2 feito", "feito 3", "1. done"
-    if (origem === 'self') {
+    // check de tarefa: "1. feito", "2 ok", "ok 3", "feito 3" — vale também
+    // para a secretária (o dono recebe aviso da ação dela via index.js)
+    {
       const check =
         lower.match(/^(\d{1,2})\s*[.\-)]?\s*(feito|feita|done|ok)\b/) ||
-        lower.match(/^(?:feito|feita|done)\s+(\d{1,2})\b/);
+        lower.match(/^(?:feito|feita|done|ok)\s+(\d{1,2})\s*$/);
       if (check) return darCheckTarefa(parseInt(check[1], 10));
 
       // nota na tarefa: "1. nota levar o RG", "nota 2: ligar depois das 14h"
@@ -43,8 +44,8 @@ export async function processarComando(texto, auth, origem = 'self') {
       if (nota) return notaTarefa(parseInt(nota[1], 10), nota[2]);
     }
 
-    // "tarefas" (hoje) e "tarefas do dia 01/7" (histórico por data)
-    if (origem === 'self' && CMD.tarefas.some((c) => lower === c || lower.startsWith(c + ' '))) {
+    // "lista"/"tarefas" (hoje) e "tarefas do dia 01/7" (histórico por data)
+    if (CMD.tarefas.some((c) => lower === c || lower.startsWith(c + ' '))) {
       return listarTarefasMsg(lower);
     }
 
@@ -57,12 +58,6 @@ export async function processarComando(texto, auth, origem = 'self') {
     if (emCmd(lower, 'semana')) return resumo('semana', auth);
     if (emCmd(lower, 'livre')) return horariosLivres(auth);
     if (emCmd(lower, 'agendas')) return listarAgendas(auth);
-    if (emCmd(lower, 'checagem') && origem === 'self') {
-      return (await dispararCheckDia(auth)) ?? t('checkdia.none');
-    }
-    if (emCmd(lower, 'reunioes') && origem === 'self') {
-      return (await dispararFollowupReunioes(auth)) ?? t('reu.none');
-    }
   }
 
   if (!iaDisponivel) return t('no.ai');
@@ -139,7 +134,7 @@ function listarTarefasMsg(lower) {
     if (!lista) return t('task.list.empty', { date: dataCurta(data) });
     return t('task.list.date', { date: dataCurta(data), list: lista });
   }
-  if (lower.replace(/^tarefas|^tasks|^todo|^to-do|de hoje|do dia/g, '').trim() !== '') {
+  if (lower.replace(/^tarefas|^tasks|^todo|^to-do|^lista|^list|de hoje|do dia/g, '').trim() !== '') {
     return t('task.list.baddate');
   }
   const lista = formatarTarefas();

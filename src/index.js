@@ -6,10 +6,10 @@ import { CONFIG } from './config.js';
 import { getAuthClient, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { processarComando } from './comandos.js';
-import { dispararCobrancas, dispararCheckDia, dispararFollowupReunioes } from './conversa.js';
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
-import { postergarPendentes, formatarTarefas } from './tarefas.js';
+import { postergarPendentes, formatarTarefas, fechamentoDoDia, criarTarefa } from './tarefas.js';
+import { paraCobrar, atualizarFollowup } from './followups.js';
 import { transcreverAudio, audioDisponivel } from './audio.js';
 import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
 import { diagnosticarAutomacoes } from './diagnostico.js';
@@ -27,6 +27,8 @@ const whatsapp = new Client({
     // headless do bot bloqueie a abertura do Chrome normal no Dock
     executablePath: puppeteer.executablePath(),
     args: ['--no-sandbox'],
+    // 60s: elimina "Page.navigate timed out" do padrão de 30s que causava reinícios
+    protocolTimeout: 60000,
   },
 });
 
@@ -131,6 +133,11 @@ async function executarDiario(auth) {
   const hoje = inicioDoDia(new Date());
   // postergação automática: pendentes de ontem ganham ❌ no histórico e cópia hoje
   const movidas = postergarPendentes();
+  // cobranças de orçamento vencidas viram linha na lista do dia (sem interrogatório)
+  for (const f of paraCobrar()) {
+    criarTarefa(t('followup.chase.title', { client: f.cliente }));
+    atualizarFollowup(f.id, { status: 'na_lista' });
+  }
   const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
   let msg = resumoDiario(eventos, hoje, t('daily.title.morning'), formatarTarefas());
   if (movidas > 0) msg += `\n${t('task.postponed.auto', { n: movidas })}`;
@@ -144,6 +151,14 @@ async function executarSemanal(auth) {
 }
 
 async function executarNoturno(auth) {
+  // fechamento do dia: consolidação única com ✅ feito / ❌ não feito
+  const fech = fechamentoDoDia();
+  if (fech) {
+    const aviso = fech.pendentes > 0
+      ? t('closing.pending', { n: fech.pendentes })
+      : t('closing.alldone');
+    await enviarMensagem(t('closing.header', { list: fech.lista, note: aviso }));
+  }
   const amanha = inicioDoDia(new Date(), 1);
   const eventos = await listarEventos(auth, amanha, inicioDoDia(new Date(), 2));
   await enviarMensagem(resumoDiario(eventos, amanha, t('daily.title.preview')));
@@ -261,8 +276,8 @@ async function processarOutboxInterno() {
     try {
       let chatId;
       if (item.grupo) {
-        // comparação tolerante: ignora maiúsculas/minúsculas e espaços nas pontas
-        const mesmoNome = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+        // comparação tolerante: ignora maiúsculas, acentos, emoji e espaços
+        const mesmoNome = (a, b) => nomeNormalizado(a) === nomeNormalizado(b);
         if (!gruposCache) gruposCache = await listarGrupos();
         let g = gruposCache.find((c) => mesmoNome(c.name, item.grupo));
         if (!g) { gruposCache = await listarGrupos(); g = gruposCache.find((c) => mesmoNome(c.name, item.grupo)); }
@@ -272,13 +287,17 @@ async function processarOutboxInterno() {
         }
         chatId = g.id;
       } else if (item.para) {
+        if (!/^\d{10,15}$/.test(String(item.para))) {
+          console.error(`outbox: número inválido descartado: "${item.para}"`);
+          continue;
+        }
         chatId = `${item.para}@c.us`;
       } else {
         continue;
       }
       await enviarPara(chatId, item.texto);
     } catch (err) {
-      console.error('outbox: falha ao enviar:', err.message);
+      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? '').slice(0, 50)}": ${err.message}`);
       item.tentativas = (item.tentativas || 0) + 1;
       if (item.tentativas < 10) restantes.push(item);
     }
@@ -336,15 +355,6 @@ async function main() {
     agendar('semanal', CONFIG.cronSemanal, '0 7 * * 1', () => comSaude(() => executarSemanal(auth)));
     agendar('noturno', CONFIG.cronNoturno, '0 21 * * *', () => comSaude(() => executarNoturno(auth)));
     agendar('lembretes', '* * * * *', null, () => comSaude(() => verificarLembretes(auth, enviarMensagem)));
-    agendar('followup', CONFIG.cronFollowup, '0 9 * * *', () => comSaude(() => dispararCobrancas(enviarMensagem)));
-    agendar('reunioes', CONFIG.cronReunioes, '0 18 * * 1-5', () => comSaude(async () => {
-      const pergunta = await dispararFollowupReunioes(auth);
-      if (pergunta) await enviarMensagem(pergunta);
-    }));
-    agendar('checkDia', CONFIG.cronCheckDia, '0 20 * * *', () => comSaude(async () => {
-      const pergunta = await dispararCheckDia(auth);
-      if (pergunta) await enviarMensagem(pergunta);
-    }));
     // briefing matinal inteligente (Claude analisa agenda + tarefas + followups)
     agendar('briefing', '10 7 * * 1-6', null, () => comSaude(async () => {
       const hoje = inicioDoDia(new Date());
