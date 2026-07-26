@@ -120,6 +120,16 @@ async function enviarMensagem(texto) {
   await enviarPara(grupoId ?? `${CONFIG.destinatario}@c.us`, texto);
 }
 
+// cópia para a conversa direta com a secretária (falha não derruba o job)
+async function enviarSecretaria(texto) {
+  if (!CONFIG.secretaria) return;
+  try {
+    await enviarPara(`${CONFIG.secretaria}@c.us`, texto);
+  } catch (err) {
+    console.error('Falha ao enviar cópia à secretária:', err.message);
+  }
+}
+
 async function comSaude(fn) {
   try {
     await fn();
@@ -142,6 +152,7 @@ async function executarDiario(auth) {
   let msg = resumoDiario(eventos, hoje, t('daily.title.morning'), formatarTarefas());
   if (movidas > 0) msg += `\n${t('task.postponed.auto', { n: movidas })}`;
   await enviarMensagem(msg);
+  await enviarSecretaria(msg); // secretária recebe o resumo do dia automaticamente
 }
 
 async function executarSemanal(auth) {
