@@ -29,13 +29,18 @@ export async function processarComando(texto, auth, origem = 'self') {
       if (quitado) return t('rec.check.done', { title: quitado.titulo });
     }
 
-    // check de tarefa: "1. feito", "2 ok", "ok 3", "feito 3" — vale também
-    // para a secretária (o dono recebe aviso da ação dela via index.js)
+    // check de tarefa: "1. feito", "2 ok", "ok 3", e múltiplos numa frase só
+    // ("11, 20, 13 ok" / "ok 11 20 13") — vale também para a secretária
+    // (o dono recebe aviso da ação dela via index.js)
     {
+      const NUMS = String.raw`\d{1,2}(?:\s*[,;e&+]?\s+\d{1,2}|\s*[,;]\s*\d{1,2})*`;
       const check =
-        lower.match(/^(\d{1,2})\s*[.\-)]?\s*(feito|feita|done|ok)\b/) ||
-        lower.match(/^(?:feito|feita|done|ok)\s+(\d{1,2})\s*$/);
-      if (check) return darCheckTarefa(parseInt(check[1], 10));
+        lower.match(new RegExp(`^(${NUMS})\\s*[.\\-),]?\\s*(?:feito|feita|feitas|done|ok)\\s*$`)) ||
+        lower.match(new RegExp(`^(?:feito|feita|feitas|done|ok)[:\\s]\\s*(${NUMS})\\s*$`));
+      if (check) {
+        const numeros = [...new Set(check[1].match(/\d{1,2}/g).map(Number))];
+        return darCheckTarefas(numeros);
+      }
 
       // nota na tarefa: "1. nota levar o RG", "nota 2: ligar depois das 14h"
       const nota =
@@ -112,10 +117,22 @@ async function horariosLivres(auth) {
   return t('free.header', { lines: linhas });
 }
 
-function darCheckTarefa(n) {
-  const tarefa = marcarFeita(n);
-  if (!tarefa) return t('task.done.badnum', { n });
-  return t('task.done', { text: tarefa.texto, list: formatarTarefas() });
+// dá check em um ou vários números de uma vez ("ok 3" / "11, 20, 13 ok")
+function darCheckTarefas(numeros) {
+  const feitas = [];
+  const invalidos = [];
+  for (const n of numeros) {
+    const tarefa = marcarFeita(n);
+    if (tarefa) feitas.push(tarefa);
+    else invalidos.push(n);
+  }
+  if (feitas.length === 0) return t('task.done.badnum', { n: invalidos.join(', ') });
+  const aviso = invalidos.length ? `\n⚠️ ${t('task.done.badnum', { n: invalidos.join(', ') })}` : '';
+  if (feitas.length === 1) {
+    return t('task.done', { text: feitas[0].texto, list: formatarTarefas() }) + aviso;
+  }
+  const linhas = feitas.map((x) => `• ${x.texto}`).join('\n');
+  return t('task.done.multi', { n: feitas.length, lines: linhas, list: formatarTarefas() }) + aviso;
 }
 
 function notaTarefa(n, nota) {
