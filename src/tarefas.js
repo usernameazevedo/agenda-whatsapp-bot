@@ -180,11 +180,12 @@ export function fechamentoDoDia(data = hojeStr()) {
 }
 
 // Lista do dia. historico=true mostra ✅/❌ (visão de auditoria por data);
-// historico=false mostra ✅/⬜ (lista de trabalho de hoje, com números para dar check).
+// historico=false agrupa pendentes e feitas em seções — o número de cada
+// tarefa é estável (posição na lista do dia), então "ok 2" continua valendo.
 export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {
   const doDia = tarefasDoDia(data);
   if (doDia.length === 0) return null;
-  const linhas = doDia.map((x, i) => {
+  const linha = (x, i) => {
     const icone = x.feito ? '✅' : historico || x.postergada ? '❌' : '⬜';
     const sufixo = !x.feito && x.postergada ? ` ${t('task.postponed.tag')}` : '';
     const info = x.info ?? {};
@@ -197,6 +198,14 @@ export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {
     const detalhes = info.detalhes ? `\n   ↳ ${info.detalhes}` : '';
     const notas = (x.notas ?? []).map((nota) => `\n   ↳ ${nota}`).join('');
     return `${i + 1}. ${icone} ${x.texto}${sufixo}${linhaInfo}${detalhes}${notas}`;
-  });
-  return linhas.join('\n');
+  };
+  if (historico) return doDia.map(linha).join('\n');
+
+  const pendentes = [];
+  const feitas = [];
+  doDia.forEach((x, i) => (x.feito ? feitas : pendentes).push(linha(x, i)));
+  const blocos = [];
+  if (pendentes.length) blocos.push(`${t('task.sec.pending')}\n${pendentes.join('\n')}`);
+  if (feitas.length) blocos.push(`${t('task.sec.done')}\n${feitas.join('\n')}`);
+  return blocos.join('\n\n');
 }
