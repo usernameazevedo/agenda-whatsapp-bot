@@ -59,15 +59,42 @@ function extrairDiaSemanaCitado(texto) {
   return null;
 }
 
-function avisoDiaSemana(pend) {
+const diaSemanaEm = (data) =>
+  new Date(new Date(data).toLocaleString('en-US', { timeZone: CONFIG.timezone })).getDay();
+
+// Se a data interpretada não cai no dia citado, CORRIGE para a próxima
+// ocorrência desse dia da semana (mantendo o horário) e avisa na confirmação.
+// A IA já converteu "sexta" em sábado em produção — o dia citado pelo usuário
+// é a fonte da verdade, não a data que o modelo devolveu.
+export function corrigirDiaSemana(pend) {
   const d = pend.dados;
   if (pend.diaCitado == null || !d.inicio) return '';
-  const real = new Date(new Date(d.inicio).toLocaleString('en-US', { timeZone: CONFIG.timezone })).getDay();
-  if (real === pend.diaCitado) return '';
-  return '\n' + t('weekday.mismatch', {
-    said: NOMES_DIA[pend.diaCitado][0],
-    got: NOMES_DIA[real][0],
-  });
+  if (diaSemanaEm(d.inicio) === pend.diaCitado) return '';
+
+  const duracaoMs = d.fim ? new Date(d.fim) - new Date(d.inicio) : null;
+  // horário citado, no fuso do bot
+  const [hh, mm] = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: CONFIG.timezone,
+  }).format(new Date(d.inicio)).split(':');
+
+  // próxima ocorrência do dia citado a partir de hoje (se for hoje e o horário
+  // já passou, vai para a semana seguinte)
+  const hojeData = new Intl.DateTimeFormat('en-CA', { timeZone: CONFIG.timezone }).format(new Date());
+  for (let add = 0; add <= 7; add++) {
+    const dia = new Date(`${hojeData}T${hh}:${mm}:00-03:00`);
+    dia.setDate(dia.getDate() + add);
+    if (diaSemanaEm(dia) !== pend.diaCitado) continue;
+    if (dia <= new Date()) continue;
+    const anterior = new Date(d.inicio);
+    d.inicio = dia.toISOString();
+    d.fim = duracaoMs ? new Date(dia.getTime() + duracaoMs).toISOString() : null;
+    if (!d.fim) d.fim = new Date(dia.getTime() + DURACAO_PADRAO_MIN * 60 * 1000).toISOString();
+    return '\n' + t('weekday.fixed', {
+      said: NOMES_DIA[pend.diaCitado][0],
+      wrong: fmtDataHora.format(anterior),
+    });
+  }
+  return '';
 }
 
 const dataDoEvento = (e) => new Date(e.start?.dateTime ?? `${e.start?.date}T12:00:00`);
@@ -369,6 +396,8 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
       }
     }
 
+    // corrige data cujo dia da semana não bate com o que o usuário citou
+    const notaDia = corrigirDiaSemana(pend);
     // aviso de dia sobrecarregado
     const aviso = await avisoSobrecarga(auth, d);
     pend.sobrecarga = Boolean(aviso);
@@ -379,7 +408,7 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
       end: fmtHora.format(new Date(d.fim)),
     };
     const base = aviso ? t('confirm.create.overload', { ...vars, warn: aviso }) : t('confirm.create', vars);
-    return base + avisoDiaSemana(pend);
+    return base + notaDia;
   }
 
   if (pend.acao === 'cancelar' || pend.acao === 'remarcar') {
@@ -409,11 +438,12 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
     if (pend.acao === 'cancelar') {
       return t('confirm.cancel', { title: d.evento.summary, when: fmtDataHora.format(dataDoEvento(d.evento)) });
     }
+    const notaDia = corrigirDiaSemana(pend);
     return t('confirm.reschedule', {
       title: d.evento.summary,
       from: fmtDataHora.format(dataDoEvento(d.evento)),
       to: fmtDataHora.format(new Date(d.inicio)),
-    }) + avisoDiaSemana(pend);
+    }) + notaDia;
   }
 
   pendencias.delete(key);

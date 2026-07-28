@@ -109,7 +109,7 @@ const DICT = {
     'confirm.create': 'Marcar "{title}" — {start} até {end}. (S/N)',
     'confirm.create.overload': 'Marcar "{title}" — {start} até {end}.\n{warn} Confirma mesmo assim? (S/N)',
     'overload.warn': 'Atenção: {day} já está com {hours}h ocupadas ({n} compromisso{s}).',
-    'weekday.mismatch': '⚠️ *Atenção:* você falou *{said}*, mas essa data cai em *{got}*. Se estiver errado, responde N e me manda a data certa.',
+    'weekday.fixed': '⚠️ Você falou *{said}* e a data interpretada caía em outro dia ({wrong}) — já corrigi para a próxima {said}. Se não for isso, responde N.',
 
     // cancelar/remarcar
     'ask.which': 'Qual compromisso? (me diz o nome dele)',
@@ -274,7 +274,7 @@ Dica: nas confirmações, responda só *S* ou *N*. 😉`,
     'confirm.create': 'Create "{title}" — {start} to {end}. (Y/N)',
     'confirm.create.overload': 'Create "{title}" — {start} to {end}.\n{warn} Confirm anyway? (Y/N)',
     'overload.warn': 'Heads up: {day} already has {hours}h booked ({n} event{s}).',
-    'weekday.mismatch': "⚠️ *Heads up:* you said *{said}*, but that date falls on a *{got}*. If that's wrong, reply N and send the right date.",
+    'weekday.fixed': "⚠️ You said *{said}* but the interpreted date fell on a different day ({wrong}) — I moved it to the next {said}. If that's wrong, reply N.",
 
     'ask.which': 'Which event? (tell me its name)',
     'notfound': 'I found no event matching "{q}" in the next 30 days. Send "week" to see what you have.',
