@@ -42,6 +42,34 @@ function lembrarMensagem(key, texto) {
   historicos.set(key, [...atuais, { texto, em: Date.now() }].slice(-HISTORICO_MAX));
 }
 
+// ─── proteção contra dia da semana trocado pela IA ───────────────────────────
+// Se o usuário citou "sexta" e a data interpretada cai no sábado, o confirmatório
+// ganha um alerta explícito (a IA já errou essa conversão em produção).
+const NOMES_DIA = [
+  ['domingo', 'sunday'], ['segunda', 'monday'], ['terça', 'terca', 'tuesday'],
+  ['quarta', 'wednesday'], ['quinta', 'thursday'], ['sexta', 'friday'],
+  ['sábado', 'sabado', 'saturday'],
+];
+
+function extrairDiaSemanaCitado(texto) {
+  const s = texto.toLowerCase();
+  for (let i = 0; i < 7; i++) {
+    if (NOMES_DIA[i].some((n) => new RegExp(`\\b${n}\\b`).test(s))) return i;
+  }
+  return null;
+}
+
+function avisoDiaSemana(pend) {
+  const d = pend.dados;
+  if (pend.diaCitado == null || !d.inicio) return '';
+  const real = new Date(new Date(d.inicio).toLocaleString('en-US', { timeZone: CONFIG.timezone })).getDay();
+  if (real === pend.diaCitado) return '';
+  return '\n' + t('weekday.mismatch', {
+    said: NOMES_DIA[pend.diaCitado][0],
+    got: NOMES_DIA[real][0],
+  });
+}
+
 const dataDoEvento = (e) => new Date(e.start?.dateTime ?? `${e.start?.date}T12:00:00`);
 const linhaCandidato = (e, i) => `(${i + 1}) ${e.summary} — ${fmtDataHora.format(dataDoEvento(e))}`;
 
@@ -154,6 +182,7 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
   const novo = {
     fase: 'slots',
     acao: intent.acao,
+    diaCitado: extrairDiaSemanaCitado(texto),
     dados: {
       titulo: intent.titulo ?? null,
       busca: intent.busca ?? null,
@@ -212,6 +241,8 @@ async function responderPendencia(texto, pend, auth, key) {
   }
 
   // fase 'slots' ou informação nova durante confirmação
+  const diaCitado = extrairDiaSemanaCitado(texto);
+  if (diaCitado != null) pend.diaCitado = diaCitado;
   const intent = await interpretar(texto, pend.dados);
   if (intent) mesclar(pend.dados, intent);
   return avancar(pend, auth, key);
@@ -347,7 +378,8 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
       start: fmtDataHora.format(new Date(d.inicio)),
       end: fmtHora.format(new Date(d.fim)),
     };
-    return aviso ? t('confirm.create.overload', { ...vars, warn: aviso }) : t('confirm.create', vars);
+    const base = aviso ? t('confirm.create.overload', { ...vars, warn: aviso }) : t('confirm.create', vars);
+    return base + avisoDiaSemana(pend);
   }
 
   if (pend.acao === 'cancelar' || pend.acao === 'remarcar') {
@@ -381,7 +413,7 @@ async function avancar(pend, auth, key = DEFAULT_KEY) {
       title: d.evento.summary,
       from: fmtDataHora.format(dataDoEvento(d.evento)),
       to: fmtDataHora.format(new Date(d.inicio)),
-    });
+    }) + avisoDiaSemana(pend);
   }
 
   pendencias.delete(key);
