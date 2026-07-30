@@ -37,4 +37,25 @@ export const CONFIG = {
   // IDs dos calendários a incluir ('primary' = principal).
   // Envie "agendas" no WhatsApp para ver os IDs disponíveis.
   calendarios: ['primary'],
+
+  // ─── Execução em servidor (opcional) ───────────────────────────────────────
+  // Veja deploy/README.md. Todos podem ficar como estão para rodar localmente.
+
+  // Caminho do Chromium. Vazio = usa o do Puppeteer. No Linux ARM é obrigatório
+  // apontar para o Chromium do sistema (ex.: /usr/bin/chromium).
+  chromePath: process.env.CHROME_PATH ?? null,
+
+  // Host SSH da sua máquina pessoal, para comandos que só existem lá
+  // (Claude Code, pastas de projeto). Vazio = esses comandos ficam desativados.
+  macSshHost: process.env.MAC_SSH_HOST ?? null,
+  macHome: process.env.MAC_HOME ?? null,
+
+  // Tópico ntfy.sh para alertas de infraestrutura quando não há notificação
+  // nativa disponível (servidor).
+  ntfyTopic: process.env.NTFY_TOPIC ?? null,
+
+  // Transcrição de áudio: vazio = descoberta automática nos caminhos padrão.
+  whisperBin: process.env.WHISPER_BIN ?? null,
+  whisperModelo: process.env.WHISPER_MODELO ?? null,
+  ffmpegBin: process.env.FFMPEG_BIN ?? null,
 };
