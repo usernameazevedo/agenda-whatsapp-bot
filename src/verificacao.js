@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CONFIG } from './config.js';
-import { rodarShell, NO_MAC, ontemStr, hojeStrLocal } from './exec.js';
+import { rodarShell, EH_MAC, ontemStr, hojeStrLocal } from './exec.js';
 
 const RAIZ = path.resolve('.');
 const MELHORIAS = path.join(RAIZ, 'MELHORIAS.md');
@@ -20,16 +20,16 @@ async function rodar(comando, timeoutMs = 30000, env = {}, cwd = RAIZ) {
 
 // A análise do código roda no Claude Code, que vive no Mac — e lá o projeto
 // está no clone do repositório, não no caminho do servidor.
-const RAIZ_NO_MAC = NO_MAC ? RAIZ : `${CONFIG.macHome}/claude/agenda-whatsapp`;
+const RAIZ_DO_MAC = EH_MAC ? RAIZ : `${CONFIG.macHome}/claude/agenda-whatsapp`;
 
 async function rodarNoMac(comando, timeoutMs, env) {
-  const { saida } = await rodarShell(comando, { cwd: RAIZ_NO_MAC, timeoutMs, env, precisaMac: true });
+  const { saida } = await rodarShell(comando, { cwd: RAIZ_DO_MAC, timeoutMs, env, precisaMac: true });
   return saida;
 }
 
 // No Mac o processo é gerenciado pelo pm2; no servidor, pelo Docker/systemd.
 async function estadoDoProcesso() {
-  if (NO_MAC) {
+  if (EH_MAC) {
     return rodar('pm2 jlist 2>/dev/null | python3 -c "import json,sys; a=json.load(sys.stdin); [print(p[\'name\'], p[\'pm2_env\'][\'status\'], \'restarts=\'+str(p[\'pm2_env\'][\'restart_time\'])) for p in a]" 2>/dev/null || pm2 ls');
   }
   return rodar(
@@ -40,7 +40,7 @@ async function estadoDoProcesso() {
 
 // Logs: arquivos do pm2 no Mac, journal do container no servidor.
 async function logs(filtro, linhas) {
-  const fonte = NO_MAC
+  const fonte = EH_MAC
     ? 'cat ~/.pm2/logs/agenda-whatsapp-error.log ~/.pm2/logs/agenda-whatsapp-out.log 2>/dev/null'
     : 'docker logs --since 48h agenda-whatsapp 2>&1';
   return rodar(`${fonte} | grep -F "$LOG_FILTRO" | tail -${linhas}`, 30000, { LOG_FILTRO: filtro });
@@ -51,7 +51,7 @@ async function coletarSaude() {
   const errosHoje = await logs(hojeStrLocal(), 10);
   const errosOntem = await logs(ontemStr(), 5);
   const naoIdentificou = await rodar(
-    (NO_MAC
+    (EH_MAC
       ? 'cat ~/.pm2/logs/agenda-whatsapp-out.log 2>/dev/null'
       : 'docker logs --since 48h agenda-whatsapp 2>&1') + ' | grep -c "não identifiquei" || true',
   );
@@ -59,7 +59,7 @@ async function coletarSaude() {
     ? fs.readFileSync(path.join(RAIZ, 'outbox.json'), 'utf8').slice(0, 300)
     : '(sem arquivo)';
   const disco = await rodar("df -h / | tail -1 | awk '{print $5\" usado\"}'");
-  const memoria = NO_MAC ? '' : await rodar("free -m | awk 'NR==2{print $3\"/\"$2\" MB usados\"}'");
+  const memoria = EH_MAC ? '' : await rodar("free -m | awk 'NR==2{print $3\"/\"$2\" MB usados\"}'");
   return (
     `processo:\n${processo.trim()}\n\n` +
     `linhas de log (hoje):\n${errosHoje.trim() || 'nenhuma'}\n\n` +

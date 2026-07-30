@@ -5,10 +5,10 @@
 // É inteiramente sobre o Mac: quando o bot roda no servidor, os comandos vão
 // por SSH. Sem acesso ao Mac, o diagnóstico simplesmente não roda.
 import { CONFIG } from './config.js';
-import { rodarShell, NO_MAC, macDisponivel } from './exec.js';
+import { rodarShell, EH_MAC, macDisponivel } from './exec.js';
 
 const TIMEOUT_MS = 3 * 60 * 1000;
-const DIR_PROJETO = NO_MAC ? '~/claude/agenda-whatsapp' : `${CONFIG.macHome}/claude/agenda-whatsapp`;
+const DIR_PROJETO = EH_MAC ? '~/claude/agenda-whatsapp' : `${CONFIG.macHome}/claude/agenda-whatsapp`;
 
 async function rodar(comando, timeoutMs = 30000, env = {}) {
   const { saida } = await rodarShell(comando, { timeoutMs, env, precisaMac: true });

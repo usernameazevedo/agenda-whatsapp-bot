@@ -6,10 +6,10 @@ import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { CONFIG } from './config.js';
-import { rodarShell, NO_MAC, macDisponivel } from './exec.js';
+import { rodarShell, EH_MAC, macDisponivel } from './exec.js';
 
 // No servidor, os caminhos são os do Mac (os comandos viajam por SSH).
-const HOME = NO_MAC ? os.homedir() : (CONFIG.macHome ?? '/Users/luisazvedo');
+const HOME = EH_MAC ? os.homedir() : (CONFIG.macHome ?? '/Users/luisazvedo');
 const DIR_CLAUDE = path.join(HOME, 'claude');
 const DIR_INSTAGRAM = path.join(HOME, 'claude', 'instagram-analytics-noxx');
 
@@ -80,7 +80,7 @@ const PASTAS_IGNORADAS = new Set(['DOC', 'Propostas', 'README.md']);
 
 // No Mac lê o disco direto; no servidor pergunta ao Mac por SSH.
 async function listarClientes() {
-  if (NO_MAC) {
+  if (EH_MAC) {
     return fsSync.readdirSync(DIR_NOXX, { withFileTypes: true })
       .filter((d) => d.isDirectory() && !PASTAS_IGNORADAS.has(d.name))
       .map((d) => d.name);
@@ -114,7 +114,7 @@ async function guardarIdeia(textoIdeia) {
   const dia = new Date().toLocaleDateString('pt-BR');
   const linha = `- **${dia}** — ${textoIdeia.trim().replace(/\n+/g, ' ')}\n`;
 
-  if (NO_MAC) {
+  if (EH_MAC) {
     if (!fsSync.existsSync(arquivo)) fsSync.writeFileSync(arquivo, `# Ideias — ${cliente}\n\n`);
     fsSync.appendFileSync(arquivo, linha);
     return `💡 Ideia guardada em ${cliente}/ideias.md`;

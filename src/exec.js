@@ -11,26 +11,40 @@
 import { spawn } from 'node:child_process';
 import { CONFIG } from './config.js';
 
-export const NO_MAC = process.platform === 'darwin';
+export const EH_MAC = process.platform === 'darwin';
 
-const SHELL = NO_MAC ? '/bin/zsh' : '/bin/bash';
+const SHELL = EH_MAC ? '/bin/zsh' : '/bin/bash';
 
 // Comandos que dependem da máquina do Luis podem rodar remotamente.
-export const macRemotoDisponivel = !NO_MAC && Boolean(CONFIG.macSshHost);
-export const macDisponivel = NO_MAC || macRemotoDisponivel;
+export const macRemotoDisponivel = !EH_MAC && Boolean(CONFIG.macSshHost);
+export const macDisponivel = EH_MAC || macRemotoDisponivel;
 
-// Monta o comando final: local, ou embrulhado em ssh quando precisa do Mac.
-function montarComando(comando, { precisaMac, cwd, env }) {
-  if (!precisaMac || NO_MAC) return { comando, spawnCwd: cwd, spawnEnv: env };
+// Escapa um valor para virar literal dentro de aspas simples do shell remoto.
+const aspasSimples = (valor) => `'${String(valor).replace(/'/g, `'\\''`)}'`;
 
-  // As variáveis viajam no próprio comando remoto (o sshd não repassa env por
-  // padrão); o valor vai em single quotes escapadas para não quebrar o shell.
+// Monta a chamada final: execução local, ou via ssh quando precisa do Mac.
+//
+// No caso remoto o `ssh` é executado DIRETAMENTE, sem passar por um shell
+// local. Se o comando ssh fosse montado como string para `bash -c`, o texto
+// sofreria duas rodadas de interpretação: o shell do servidor expandiria `$VAR`
+// e `$(...)` do conteúdo antes do envio — o que corromperia mensagens comuns
+// ("orçamento de R$500") e executaria comandos vindos do texto do WhatsApp.
+function montarChamada(comando, { precisaMac, cwd, env }) {
+  if (!precisaMac || EH_MAC) {
+    return { bin: SHELL, args: ['-l', '-c', comando], spawnCwd: cwd, spawnEnv: env };
+  }
+
+  // As variáveis viajam no próprio comando remoto: o sshd não repassa env.
   const exports = Object.entries(env)
-    .map(([chave, valor]) => `export ${chave}='${String(valor).replace(/'/g, `'\\''`)}'`)
+    .map(([chave, valor]) => `export ${chave}=${aspasSimples(valor)}`)
     .join('; ');
-  const remoto = [cwd ? `cd '${cwd}'` : '', exports, comando].filter(Boolean).join('; ');
+  const remoto = [cwd ? `cd ${aspasSimples(cwd)}` : '', exports, comando]
+    .filter(Boolean)
+    .join('; ');
+
   return {
-    comando: `ssh -o BatchMode=yes -o ConnectTimeout=15 ${CONFIG.macSshHost} ${JSON.stringify(remoto)}`,
+    bin: 'ssh',
+    args: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', CONFIG.macSshHost, remoto],
     spawnCwd: undefined,
     spawnEnv: {},
   };
@@ -52,10 +66,10 @@ export function rodarShell(comando, opcoes = {}) {
     });
   }
 
-  const alvo = montarComando(comando, { precisaMac, cwd, env });
+  const alvo = montarChamada(comando, { precisaMac, cwd, env });
 
   return new Promise((resolve) => {
-    const proc = spawn(SHELL, ['-l', '-c', alvo.comando], {
+    const proc = spawn(alvo.bin, alvo.args, {
       cwd: alvo.spawnCwd,
       env: { ...process.env, ...alvo.spawnEnv },
     });

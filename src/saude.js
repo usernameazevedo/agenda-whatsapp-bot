@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import { CONFIG } from './config.js';
-import { NO_MAC } from './exec.js';
+import { EH_MAC } from './exec.js';
 import { t } from './i18n.js';
 
 // Alerta de infraestrutura — usado quando o WhatsApp cai ou o Google falha,
@@ -9,7 +9,7 @@ import { t } from './i18n.js';
 export function notificar(titulo, texto) {
   console.error(`[saude] ${titulo}: ${texto}`);
 
-  if (NO_MAC) {
+  if (EH_MAC) {
     const tit = String(titulo).replace(/"/g, '\\"');
     const x = String(texto).replace(/"/g, '\\"');
     exec(`osascript -e 'display notification "${x}" with title "${tit}" sound name "Basso"'`);
