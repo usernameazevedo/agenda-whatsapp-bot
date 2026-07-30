@@ -5,6 +5,7 @@
 //
 //   node bin/adicionar.js tarefa "Ligar pro João" [2026-07-28]
 //   node bin/adicionar.js evento "Reunião com cliente" "2026-07-28T15:00" [60]
+//   node bin/adicionar.js msg "texto livre para o grupo"
 //
 // A confirmação chega no WhatsApp via outbox (o bot envia em até 30s).
 import fs from 'node:fs';
@@ -20,11 +21,11 @@ function sair(msg, codigo = 1) {
 }
 
 // enfileira aviso no outbox do bot (grupo padrão do config)
-function avisarWhatsApp(texto) {
+function avisarWhatsApp(texto, grupo = CONFIG.grupo) {
   const OUTBOX = path.resolve('outbox.json');
   let fila = [];
   try { fila = JSON.parse(fs.readFileSync(OUTBOX, 'utf8')); } catch { /* fila nova */ }
-  fila.push({ grupo: CONFIG.grupo, texto });
+  fila.push({ grupo, texto });
   fs.writeFileSync(OUTBOX, JSON.stringify(fila, null, 1));
 }
 
@@ -49,6 +50,12 @@ if (modo === 'tarefa') {
   const quando = inicio.toLocaleString('pt-BR', { timeZone: CONFIG.timezone, hour12: false });
   avisarWhatsApp(`📅 Agendado via Claude: *${titulo}* — ${quando} (${duracaoMin}min)\n${evento.htmlLink ?? ''}`);
   console.log(`Evento criado: ${titulo} — ${quando}`);
+} else if (modo === 'msg') {
+  // Enfileira texto livre no outbox (usado pelo /publicar-html e scripts).
+  const [texto, grupo] = args;
+  if (!texto) sair('Uso: node bin/adicionar.js msg "texto" ["Nome do Grupo"]');
+  avisarWhatsApp(texto, grupo || CONFIG.grupo);
+  console.log(`Mensagem enfileirada no outbox (grupo: ${grupo || CONFIG.grupo}).`);
 } else {
-  sair('Uso: node bin/adicionar.js tarefa|evento ... (veja o cabeçalho do arquivo)');
+  sair('Uso: node bin/adicionar.js tarefa|evento|msg ... (veja o cabeçalho do arquivo)');
 }

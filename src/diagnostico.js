@@ -1,25 +1,23 @@
 // Diagnóstico diário das automações do Mac (LaunchAgents do Luis + pm2).
 // Se algo estiver com exit code de erro, pede um diagnóstico curto ao Claude
 // e devolve a mensagem para o WhatsApp; retorna null quando está tudo bem.
-import { spawn } from 'node:child_process';
-import os from 'node:os';
-import path from 'node:path';
+//
+// É inteiramente sobre o Mac: quando o bot roda no servidor, os comandos vão
+// por SSH. Sem acesso ao Mac, o diagnóstico simplesmente não roda.
+import { CONFIG } from './config.js';
+import { rodarShell, NO_MAC, macDisponivel } from './exec.js';
 
 const TIMEOUT_MS = 3 * 60 * 1000;
+const DIR_PROJETO = NO_MAC ? '~/claude/agenda-whatsapp' : `${CONFIG.macHome}/claude/agenda-whatsapp`;
 
-function rodar(comando, timeoutMs = 30000, env = {}) {
-  return new Promise((resolve) => {
-    const proc = spawn('/bin/zsh', ['-l', '-c', comando], { env: { ...process.env, ...env } });
-    let saida = '';
-    const timer = setTimeout(() => { proc.kill('SIGKILL'); resolve(saida); }, timeoutMs);
-    proc.stdout.on('data', (d) => { saida += d; });
-    proc.stderr.on('data', (d) => { saida += d; });
-    proc.on('close', () => { clearTimeout(timer); resolve(saida); });
-    proc.on('error', () => { clearTimeout(timer); resolve(saida); });
-  });
+async function rodar(comando, timeoutMs = 30000, env = {}) {
+  const { saida } = await rodarShell(comando, { timeoutMs, env, precisaMac: true });
+  return saida;
 }
 
 export async function diagnosticarAutomacoes() {
+  if (!macDisponivel) return null;
+
   const lista = await rodar('launchctl list | grep -E "luisazvedo|luisazevedo" || true');
   // formato: PID\tExitCode\tLabel — problema = exit code diferente de 0
   const quebrados = lista.split('\n')
@@ -31,7 +29,7 @@ export async function diagnosticarAutomacoes() {
 
   // contexto de logs conhecidos para o diagnóstico
   const logs = await rodar(
-    'for f in ~/claude/agenda-whatsapp/agenda.log ~/.pm2/logs/agenda-whatsapp-error.log /tmp/*luisazvedo*.log; do' +
+    `for f in ${DIR_PROJETO}/agenda.log ~/.pm2/logs/agenda-whatsapp-error.log /tmp/*luisazvedo*.log; do` +
     ' [ -f "$f" ] && echo "== $f ==" && tail -20 "$f"; done 2>/dev/null | tail -80',
   );
 

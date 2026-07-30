@@ -14,19 +14,35 @@ import { transcreverAudio, audioDisponivel } from './audio.js';
 import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
 import { diagnosticarAutomacoes } from './diagnostico.js';
 import { verificacaoDiaria } from './verificacao.js';
-import { notificarMac, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
+import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
 const { Client, LocalAuth } = pkg;
+
+// No Mac: Chromium do Puppeteer, não o Chrome do sistema (evita que a instância
+// headless do bot bloqueie a abertura do Chrome normal no Dock).
+// No Linux ARM: o Chrome for Testing não tem build arm64, então CHROME_PATH
+// aponta para o Chromium do sistema — e precisa vir aqui nas opções de launch,
+// porque o Puppeteer ignora PUPPETEER_EXECUTABLE_PATH nessa arquitetura.
+function caminhoChromium() {
+  if (CONFIG.chromePath) return CONFIG.chromePath;
+  try {
+    return puppeteer.executablePath();
+  } catch (err) {
+    throw new Error(
+      `Chromium não encontrado (${err.message}). No Linux ARM, instale o chromium do sistema e defina CHROME_PATH.`,
+    );
+  }
+}
 
 const whatsapp = new Client({
   authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
   puppeteer: {
     headless: true,
-    // Chromium do Puppeteer, não o Chrome do sistema: evita que a instância
-    // headless do bot bloqueie a abertura do Chrome normal no Dock
-    executablePath: puppeteer.executablePath(),
-    args: ['--no-sandbox'],
+    executablePath: caminhoChromium(),
+    // --disable-dev-shm-usage: em container o /dev/shm padrão de 64 MB derruba
+    // o Chromium; --disable-gpu evita tentativas de acelerar sem GPU no servidor
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     // 60s: elimina "Page.navigate timed out" do padrão de 30s que causava reinícios
     protocolTimeout: 60000,
   },
@@ -43,7 +59,7 @@ whatsapp.on('qr', async (qr) => {
   } catch (err) {
     console.error('Falha ao salvar qr.png:', err.message);
   }
-  notificarMac('Agenda WhatsApp', t('notif.qr'));
+  notificar('Agenda WhatsApp', t('notif.qr'));
 });
 
 // hora atual (0-23) no fuso configurado
@@ -226,7 +242,7 @@ async function avisarRecuperacao() {
 async function reiniciarLimpo(motivo) {
   console.error(`[watchdog] ${motivo} — reiniciando para recuperar.`);
   registrarQueda(motivo);
-  notificarMac('Agenda WhatsApp', t('notif.recover', { r: motivo }));
+  notificar('Agenda WhatsApp', t('notif.recover', { r: motivo }));
   try {
     await whatsapp.destroy();
   } catch {}
@@ -490,7 +506,7 @@ async function main() {
 
   whatsapp.on('auth_failure', (msg) => {
     console.error('Falha de autenticação no WhatsApp:', msg);
-    notificarMac('Agenda WhatsApp', t('notif.authfail'));
+    notificar('Agenda WhatsApp', t('notif.authfail'));
   });
   // camada 3: desconexão explícita → reinício limpo imediato
   whatsapp.on('disconnected', (reason) => {
@@ -516,6 +532,6 @@ for (const sinal of ['SIGINT', 'SIGTERM']) {
 main().catch((err) => {
   console.error('Erro fatal:', err.message);
   registrarQueda(`erro fatal: ${err.message}`);
-  notificarMac('Agenda WhatsApp', `Serviço parou: ${err.message}`);
+  notificar('Agenda WhatsApp', `Serviço parou: ${err.message}`);
   process.exit(1);
 });

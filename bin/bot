@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Canal Claude → bot, funcionando com o bot local OU no servidor.
+#
+#   bot tarefa "Ligar pro João" [2026-07-28]
+#   bot evento "Reunião com cliente" "2026-07-28T15:00" [60]
+#   bot msg "texto livre para o grupo"
+#
+# Se BOT_REMOTO estiver definido (ex.: export BOT_REMOTO=oracle-bot), o comando
+# roda dentro do container no servidor. Senão, roda local, como sempre.
+set -euo pipefail
+
+PROJETO_LOCAL="$HOME/claude/agenda-whatsapp"
+PROJETO_REMOTO="${BOT_REMOTO_DIR:-~/agenda-whatsapp}"
+MODO="${1:-}"
+
+if [ -z "$MODO" ]; then
+  echo "Uso: bot tarefa|evento|msg ..." >&2
+  exit 1
+fi
+
+if [ -n "${BOT_REMOTO:-}" ]; then
+  # docker exec preserva os argumentos com espaços; o container já tem o cwd certo.
+  exec ssh "$BOT_REMOTO" \
+    docker exec -w /app agenda-whatsapp node bin/adicionar.js "$@"
+fi
+
+cd "$PROJETO_LOCAL"
+exec node bin/adicionar.js "$@"

@@ -4,8 +4,8 @@
 // ficam em MELHORIAS.md para não repetir e servir de backlog.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import { spawn } from 'node:child_process';
+import { CONFIG } from './config.js';
+import { rodarShell, NO_MAC, ontemStr, hojeStrLocal } from './exec.js';
 
 const RAIZ = path.resolve('.');
 const MELHORIAS = path.join(RAIZ, 'MELHORIAS.md');
@@ -13,27 +13,61 @@ const TIMEOUT_MS = 6 * 60 * 1000;
 const MODELO = process.env.VERIFICACAO_MODEL || 'haiku';
 const MAX_MSG = 3500;
 
-function rodar(comando, timeoutMs = 30000, env = {}, cwd = RAIZ) {
-  return new Promise((resolve) => {
-    const proc = spawn('/bin/zsh', ['-l', '-c', comando], { cwd, env: { ...process.env, ...env } });
-    let saida = '';
-    const timer = setTimeout(() => { proc.kill('SIGKILL'); resolve(saida); }, timeoutMs);
-    proc.stdout.on('data', (d) => { saida += d; });
-    proc.stderr.on('data', (d) => { saida += d; });
-    proc.on('close', () => { clearTimeout(timer); resolve(saida); });
-    proc.on('error', () => { clearTimeout(timer); resolve(saida); });
-  });
+async function rodar(comando, timeoutMs = 30000, env = {}, cwd = RAIZ) {
+  const { saida } = await rodarShell(comando, { cwd, timeoutMs, env });
+  return saida;
+}
+
+// A análise do código roda no Claude Code, que vive no Mac — e lá o projeto
+// está no clone do repositório, não no caminho do servidor.
+const RAIZ_NO_MAC = NO_MAC ? RAIZ : `${CONFIG.macHome}/claude/agenda-whatsapp`;
+
+async function rodarNoMac(comando, timeoutMs, env) {
+  const { saida } = await rodarShell(comando, { cwd: RAIZ_NO_MAC, timeoutMs, env, precisaMac: true });
+  return saida;
+}
+
+// No Mac o processo é gerenciado pelo pm2; no servidor, pelo Docker/systemd.
+async function estadoDoProcesso() {
+  if (NO_MAC) {
+    return rodar('pm2 jlist 2>/dev/null | python3 -c "import json,sys; a=json.load(sys.stdin); [print(p[\'name\'], p[\'pm2_env\'][\'status\'], \'restarts=\'+str(p[\'pm2_env\'][\'restart_time\'])) for p in a]" 2>/dev/null || pm2 ls');
+  }
+  return rodar(
+    'docker ps --filter name=agenda-whatsapp --format "{{.Names}} {{.Status}}" 2>/dev/null' +
+      ' || systemctl --user is-active agenda-whatsapp 2>/dev/null || echo "(sem gerenciador detectado)"',
+  );
+}
+
+// Logs: arquivos do pm2 no Mac, journal do container no servidor.
+async function logs(filtro, linhas) {
+  const fonte = NO_MAC
+    ? 'cat ~/.pm2/logs/agenda-whatsapp-error.log ~/.pm2/logs/agenda-whatsapp-out.log 2>/dev/null'
+    : 'docker logs --since 48h agenda-whatsapp 2>&1';
+  return rodar(`${fonte} | grep -F "$LOG_FILTRO" | tail -${linhas}`, 30000, { LOG_FILTRO: filtro });
 }
 
 async function coletarSaude() {
-  const pm2 = await rodar('pm2 jlist 2>/dev/null | python3 -c "import json,sys; a=json.load(sys.stdin); [print(p[\'name\'], p[\'pm2_env\'][\'status\'], \'restarts=\'+str(p[\'pm2_env\'][\'restart_time\'])) for p in a]" 2>/dev/null || pm2 ls');
-  const errosLog = await rodar('grep "$(date +%Y-%m-%d)\\|$(date -v-1d +%Y-%m-%d)" ~/.pm2/logs/agenda-whatsapp-error.log 2>/dev/null | tail -15');
-  const atividade = await rodar('grep -c "Mensagem recebida" ~/.pm2/logs/agenda-whatsapp-out.log 2>/dev/null; grep "$(date -v-1d +%Y-%m-%dT)" ~/.pm2/logs/agenda-whatsapp-out.log 2>/dev/null | grep -c "não identifiquei"');
+  const processo = await estadoDoProcesso();
+  const errosHoje = await logs(hojeStrLocal(), 10);
+  const errosOntem = await logs(ontemStr(), 5);
+  const naoIdentificou = await rodar(
+    (NO_MAC
+      ? 'cat ~/.pm2/logs/agenda-whatsapp-out.log 2>/dev/null'
+      : 'docker logs --since 48h agenda-whatsapp 2>&1') + ' | grep -c "não identifiquei" || true',
+  );
   const outbox = fs.existsSync(path.join(RAIZ, 'outbox.json'))
     ? fs.readFileSync(path.join(RAIZ, 'outbox.json'), 'utf8').slice(0, 300)
     : '(sem arquivo)';
   const disco = await rodar("df -h / | tail -1 | awk '{print $5\" usado\"}'");
-  return `pm2:\n${pm2.trim()}\n\nerros (24-48h):\n${errosLog.trim() || 'nenhum'}\n\noutbox pendente: ${outbox.trim()}\ndisco: ${disco.trim()}\nrespostas "não identifiquei" ontem: ${atividade.split('\n')[1] ?? '?'}`;
+  const memoria = NO_MAC ? '' : await rodar("free -m | awk 'NR==2{print $3\"/\"$2\" MB usados\"}'");
+  return (
+    `processo:\n${processo.trim()}\n\n` +
+    `linhas de log (hoje):\n${errosHoje.trim() || 'nenhuma'}\n\n` +
+    `linhas de log (ontem):\n${errosOntem.trim() || 'nenhuma'}\n\n` +
+    `outbox pendente: ${outbox.trim()}\ndisco: ${disco.trim()}\n` +
+    (memoria ? `memória: ${memoria.trim()}\n` : '') +
+    `respostas "não identifiquei" (48h): ${naoIdentificou.trim() || '?'}`
+  );
 }
 
 function sugestoesAnteriores() {
@@ -64,7 +98,9 @@ export async function verificacaoDiaria() {
     `(funcionalidade, robustez ou UX do WhatsApp), com 1-2 frases do que é e por que vale a pena. ` +
     `Responda no total em até 12 linhas.`;
 
-  const resposta = await rodar(
+  // A CLI do Claude e o repo de trabalho ficam no Mac; quando o bot está no
+  // servidor, o pedido viaja por SSH e o código analisado é o clone do Mac.
+  const resposta = await rodarNoMac(
     `claude -p "$VERIF_PROMPT" --model "$VERIF_MODEL" --allowedTools "Read,Glob,Grep" < /dev/null`,
     TIMEOUT_MS,
     { VERIF_PROMPT: pedido, VERIF_MODEL: MODELO },

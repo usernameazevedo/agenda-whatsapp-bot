@@ -1,0 +1,35 @@
+# Sobe o bot no servidor. Rodar de dentro de ~/agenda-whatsapp:
+#   docker compose -f deploy/docker-compose.yml up -d
+services:
+  agenda-whatsapp:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: agenda-whatsapp:local
+    container_name: agenda-whatsapp
+    restart: unless-stopped
+    init: true
+    # O Chromium morre com o /dev/shm padrão de 64 MB.
+    shm_size: 1gb
+    env_file:
+      - ../.env
+    volumes:
+      # Código e dados (tarefas.json, outbox.json, token.json, sessão do
+      # WhatsApp) ficam no host: sobrevivem a rebuild e são fáceis de copiar.
+      - ../:/app
+      # node_modules é da imagem, não do host (o host é ARM Linux, o Mac não).
+      - /app/node_modules
+      # Chave SSH para os comandos que precisam do Mac (claude:, ideia:, relatorio).
+      - ~/.ssh:/home/node/.ssh:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    healthcheck:
+      # O bot escreve no log a cada ciclo; o teste real é o processo node vivo.
+      test: ['CMD-SHELL', 'pgrep -f "node src/index.js" > /dev/null || exit 1']
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s

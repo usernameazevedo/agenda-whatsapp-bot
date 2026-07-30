@@ -111,6 +111,18 @@ pm2 startup   # siga a instrução exibida para iniciar no boot
 
 > **macOS:** edite o plist gerado pelo `pm2 startup` trocando `/bin/sh -c` por `/bin/zsh -l -c` — sem shell de login, o Chrome trava na inicialização (aprendemos isso do jeito difícil, veja abaixo).
 
+### 5. Ou rodar num servidor (Docker)
+
+Para tirar o Chromium do seu computador, há uma imagem pronta para VPS Linux ARM
+ou x86:
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+O passo a passo completo (VM gratuita da Oracle Cloud, QR remoto, transcrição de
+áudio no servidor) está em [deploy/README.md](deploy/README.md).
+
 ## 🔥 Lições aprendidas (para você não sofrer)
 
 Este projeto passou por uma jornada de depuração real. Os pepinos e as soluções:
@@ -144,7 +156,7 @@ Tudo em `src/config.js`: idioma, horários dos resumos (cron), antecedência dos
 - [ ] Horários livres em comum entre várias pessoas
 - [ ] Eventos recorrentes no calendário (com escopo "só essa / toda a série")
 - [ ] Comandos por áudio (transcrição)
-- [ ] Guia de deploy em Raspberry Pi / VPS
+- [x] Guia de deploy em VPS (Docker + Oracle Cloud ARM) — veja `deploy/README.md`
 
 ## ⚠️ Avisos
 

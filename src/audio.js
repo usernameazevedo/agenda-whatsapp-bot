@@ -11,13 +11,25 @@ import { LOCALE } from './i18n.js';
 
 const exec = promisify(execFile);
 
-const WHISPER_BIN = CONFIG.whisperBin ?? '/opt/homebrew/bin/whisper-cli';
-const WHISPER_MODELO = CONFIG.whisperModelo ?? path.join(os.homedir(), 'claude/whisper-models/ggml-large-v3-turbo.bin');
-const FFMPEG = '/opt/homebrew/bin/ffmpeg';
+// Primeiro caminho existente da lista (o Mac usa homebrew, o servidor usa /usr).
+function primeiroExistente(...caminhos) {
+  return caminhos.filter(Boolean).find((c) => fs.existsSync(c)) ?? null;
+}
+
+const WHISPER_BIN = primeiroExistente(
+  CONFIG.whisperBin,
+  '/opt/homebrew/bin/whisper-cli',
+  '/usr/local/bin/whisper-cli',
+);
+const WHISPER_MODELO = primeiroExistente(
+  CONFIG.whisperModelo,
+  path.join(os.homedir(), 'claude/whisper-models/ggml-large-v3-turbo.bin'),
+  '/opt/whisper-models/ggml-small.bin',
+);
+const FFMPEG = primeiroExistente(CONFIG.ffmpegBin, '/opt/homebrew/bin/ffmpeg', '/usr/bin/ffmpeg');
 const TIMEOUT_MS = 120 * 1000;
 
-export const audioDisponivel =
-  fs.existsSync(WHISPER_BIN) && fs.existsSync(WHISPER_MODELO) && fs.existsSync(FFMPEG);
+export const audioDisponivel = Boolean(WHISPER_BIN && WHISPER_MODELO && FFMPEG);
 
 export async function transcreverAudio(base64) {
   if (!audioDisponivel) return null;

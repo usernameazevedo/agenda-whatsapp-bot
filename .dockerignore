@@ -1,0 +1,19 @@
+# A sessão do WhatsApp tem 1 GB de perfil do Chromium do Mac e não serve no
+# servidor (escaneia-se um QR novo lá).
+.wwebjs_auth
+.wwebjs_cache
+node_modules
+.git
+agenda.log
+qr.png
+.env
+*.log
+
+# Credenciais e dados vêm do volume do host, não da imagem.
+token.json
+credentials.json
+tarefas.json
+followups.json
+outbox.json
+recorrentes.json
+MELHORIAS.md
