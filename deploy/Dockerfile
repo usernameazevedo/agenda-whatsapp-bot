@@ -1,10 +1,8 @@
-# Imagem do bot para servidor Linux ARM64 (Oracle Cloud Ampere).
+# Imagem do bot para servidor Linux (ARM64 ou x86).
 #
-# Duas decisões que valem explicação:
-#  1. Chromium vem do apt do Debian, não do Puppeteer: não existe build do
-#     Chrome for Testing para linux/arm64. Por isso PUPPETEER_SKIP_DOWNLOAD.
-#  2. O whisper.cpp é compilado num estágio separado e só o binário viaja para
-#     a imagem final, que fica sem compilador.
+# Desde a migração para o Baileys não há navegador aqui: o WhatsApp é falado
+# por WebSocket. O que sobra de pesado é o whisper.cpp da transcrição de áudio,
+# compilado num estágio separado para a imagem final ficar sem compilador.
 
 # ─── estágio 1: whisper.cpp + modelo de transcrição ──────────────────────────
 FROM node:22-bookworm-slim AS whisper
@@ -45,24 +43,18 @@ FROM node:22-bookworm-slim
 ARG WHISPER_MODELO=small
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      chromium \
-      fonts-liberation fonts-noto-color-emoji \
       ffmpeg \
       ca-certificates \
       openssh-client \
       tini \
       python3 \
       procps \
-      # o whatsapp-web.js é instalado direto do GitHub (ver package.json)
-      git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=whisper /usr/local/bin/whisper-cli /usr/local/bin/whisper-cli
 COPY --from=whisper /opt/whisper-models /opt/whisper-models
 
-ENV PUPPETEER_SKIP_DOWNLOAD=true \
-    CHROME_PATH=/usr/bin/chromium \
-    WHISPER_BIN=/usr/local/bin/whisper-cli \
+ENV WHISPER_BIN=/usr/local/bin/whisper-cli \
     WHISPER_MODELO=/opt/whisper-models/ggml-${WHISPER_MODELO}.bin \
     FFMPEG_BIN=/usr/bin/ffmpeg \
     NODE_ENV=production \
@@ -76,10 +68,10 @@ RUN npm ci --omit=dev --ignore-scripts
 
 COPY . .
 
-# Chromium com --no-sandbox como root é uma combinação ruim; roda como 'node'.
+# Nunca rodar como root: o processo fica exposto à internet o tempo todo.
 RUN chown -R node:node /app
 USER node
 
-# tini colhe os processos zumbis que o Chromium deixa a cada reinício de sessão.
+# tini como init: garante que sinais cheguem ao Node e não sobrem zumbis.
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "src/index.js"]

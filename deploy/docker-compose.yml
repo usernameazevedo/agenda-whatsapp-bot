@@ -9,8 +9,6 @@ services:
     container_name: agenda-whatsapp
     restart: unless-stopped
     init: true
-    # O Chromium morre com o /dev/shm padrão de 64 MB.
-    shm_size: 1gb
     env_file:
       - ../.env
     volumes:

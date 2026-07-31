@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import qrcode from 'qrcode-terminal';
-import pkg from 'whatsapp-web.js';
-import puppeteer from 'puppeteer';
+import { WhatsApp, normalizarId, numeroDe, ehGrupo } from './whatsapp.js';
 import { CONFIG } from './config.js';
 import { getAuthClient, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
@@ -17,36 +16,7 @@ import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { t } from './i18n.js';
 
-const { Client, LocalAuth } = pkg;
-
-// No Mac: Chromium do Puppeteer, não o Chrome do sistema (evita que a instância
-// headless do bot bloqueie a abertura do Chrome normal no Dock).
-// No Linux ARM: o Chrome for Testing não tem build arm64, então CHROME_PATH
-// aponta para o Chromium do sistema — e precisa vir aqui nas opções de launch,
-// porque o Puppeteer ignora PUPPETEER_EXECUTABLE_PATH nessa arquitetura.
-function caminhoChromium() {
-  if (CONFIG.chromePath) return CONFIG.chromePath;
-  try {
-    return puppeteer.executablePath();
-  } catch (err) {
-    throw new Error(
-      `Chromium não encontrado (${err.message}). No Linux ARM, instale o chromium do sistema e defina CHROME_PATH.`,
-    );
-  }
-}
-
-const whatsapp = new Client({
-  authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
-  puppeteer: {
-    headless: true,
-    executablePath: caminhoChromium(),
-    // --disable-dev-shm-usage: em container o /dev/shm padrão de 64 MB derruba
-    // o Chromium; --disable-gpu evita tentativas de acelerar sem GPU no servidor
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    // 60s: elimina "Page.navigate timed out" do padrão de 30s que causava reinícios
-    protocolTimeout: 60000,
-  },
-});
+const whatsapp = new WhatsApp();
 
 whatsapp.on('qr', async (qr) => {
   aguardandoQr = true;
@@ -82,7 +52,15 @@ function inicioDoDia(data, offsetDias = 0) {
 // marcador invisível no início de toda mensagem do bot (evita processar a si mesmo)
 const MARCA_BOT = '​';
 
+// Modo de validação: recebe e processa tudo, mas não envia nada. Serve para
+// rodar a versão nova em paralelo com a antiga sem duplicar respostas.
+const DRY_RUN = process.argv.includes('--dry-run');
+
 async function enviarPara(chatId, texto) {
+  if (DRY_RUN) {
+    console.log(`[dry-run] enviaria para ${chatId}: ${texto.slice(0, 120).replace(/\n/g, ' | ')}`);
+    return;
+  }
   await whatsapp.sendMessage(chatId, MARCA_BOT + texto);
   console.log(`[${new Date().toISOString()}] Bot respondeu: ${texto.slice(0, 100).replace(/\n/g, ' | ')}`);
 }
@@ -98,15 +76,10 @@ const nomeNormalizado = (s) =>
     .replace(/[^a-z0-9]/gi, '')
     .toLowerCase();
 
-// getChats() quebrou com "Error: r" após atualização do WhatsApp Web (jul/2026);
-// lê a lista de grupos direto do Store da página, sem a serialização da lib
-async function listarGrupos() {
-  return whatsapp.pupPage.evaluate(() =>
-    window.require('WAWebCollections').Chat.getModelsArray()
-      .filter((c) => c.isGroup ?? c.id?.server === 'g.us')
-      .map((c) => ({ id: c.id._serialized, name: c.formattedTitle ?? c.name ?? '' }))
-  );
-}
+// Lista de grupos vem direto do protocolo. O workaround de ler o Store da
+// página (necessário quando o getChats() do whatsapp-web.js quebrou em jul/2026)
+// deixou de existir junto com o navegador.
+const listarGrupos = () => whatsapp.listarGrupos();
 
 async function resolverGrupo() {
   if (!CONFIG.grupo && !CONFIG.grupoId) return;
@@ -133,14 +106,14 @@ async function resolverGrupo() {
 }
 
 async function enviarMensagem(texto) {
-  await enviarPara(grupoId ?? `${CONFIG.destinatario}@c.us`, texto);
+  await enviarPara(grupoId ?? `${CONFIG.destinatario}@s.whatsapp.net`, texto);
 }
 
 // cópia para a conversa direta com a secretária (falha não derruba o job)
 async function enviarSecretaria(texto) {
   if (!CONFIG.secretaria) return;
   try {
-    await enviarPara(`${CONFIG.secretaria}@c.us`, texto);
+    await enviarPara(`${CONFIG.secretaria}@s.whatsapp.net`, texto);
   } catch (err) {
     console.error('Falha ao enviar cópia à secretária:', err.message);
   }
@@ -318,7 +291,7 @@ async function processarOutboxInterno() {
           console.error(`outbox: número inválido descartado: "${item.para}"`);
           continue;
         }
-        chatId = `${item.para}@c.us`;
+        chatId = `${item.para}@s.whatsapp.net`;
       } else {
         continue;
       }
@@ -413,42 +386,43 @@ async function main() {
 
     console.log(`Agendado: diário (${CONFIG.cronDiario}), semanal (${CONFIG.cronSemanal}), noturno (${CONFIG.cronNoturno}), lembretes ${CONFIG.lembreteMinutos.join('/')}min antes — ${CONFIG.timezone}`);
 
-    const chatsAutorizados = new Set([
-      `${CONFIG.destinatario}@c.us`,
-      ...(CONFIG.chatsExtras ?? []),
-    ]);
+    // Números autorizados a comandar o bot, comparados só pelos dígitos: o
+    // WhatsApp usa @s.whatsapp.net, @lid e @c.us para o mesmo contato.
+    const numerosAutorizados = new Set(
+      [CONFIG.destinatario, ...(CONFIG.chatsExtras ?? [])].map(numeroDe).filter(Boolean),
+    );
+    const numerosSecretaria = new Set(
+      [CONFIG.secretaria, ...(CONFIG.secretariaChats ?? [])].map(numeroDe).filter(Boolean),
+    );
     const PREFIXOS_BOT = ['✅', '🤖', '❓', '☀️', '🗓', '🌙', '🌅', '🔔', '🗑', '🔁', '🕓', '📚', '😅', '🤔', '👋', '📝', '🕐', '📋', '⚠️', '👍', '📌', '⏰', '🚨', '📊', '⏳', '🧠', '💡', '🩺'];
-    whatsapp.on('message_create', async (msg) => {
+    whatsapp.on('message', async (msg) => {
       try {
-        // id do chat derivado da própria mensagem (msg.getChat() está quebrado
-        // em algumas versões do WhatsApp Web — evitamos depender dele)
-        const chatId = msg.fromMe ? msg.to : msg.from;
-        if (chatId === 'status@broadcast') return; // Status de contatos: ignora sem poluir o log
-        const isGroup = chatId.endsWith('@g.us');
-        const isAudio = audioDisponivel && (msg.type === 'ptt' || msg.type === 'audio');
+        const chatId = msg.chatId;
+        if (!chatId || chatId === 'status@broadcast') return; // Status de contatos
+        const isGroup = ehGrupo(chatId);
+        const isAudio = audioDisponivel && msg.isAudio;
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
 
-        // conversa "com você mesmo" (formato antigo @c.us ou novo @lid),
-        // ou mensagem SUA no grupo do bot
+        // Conversa consigo mesmo (o chat é o próprio número, em qualquer um dos
+        // formatos de ID), ou mensagem SUA no grupo do bot.
+        // Cuidado: "fromMe" sozinho não serve — toda mensagem que o dono manda
+        // para terceiros também é fromMe, e viraria comando para o bot.
+        const numeroChat = numeroDe(chatId);
+        const meuNumero = numeroDe(whatsapp.jidProprio);
         const isConversaPropria =
-          msg.from === msg.to ||
-          chatsAutorizados.has(chatId) ||
+          (Boolean(numeroChat) && numeroChat === meuNumero) ||
+          numerosAutorizados.has(numeroChat) ||
           (grupoId && chatId === grupoId && msg.fromMe);
 
-        // conversa direta com a secretária: só mensagens DELA (não as suas)
-        let isSecretaria = false;
-        if (!isConversaPropria && !msg.fromMe && !isGroup && CONFIG.secretaria) {
-          isSecretaria =
-            (CONFIG.secretariaChats ?? []).includes(chatId) ||
-            msg.from === `${CONFIG.secretaria}@c.us`;
-          if (!isSecretaria) {
-            const contato = await msg.getContact().catch(() => null);
-            isSecretaria = contato?.number === CONFIG.secretaria;
-          }
-        }
+        // Conversa direta com a secretária: só mensagens DELA, não as suas.
+        const isSecretaria =
+          !isConversaPropria &&
+          !msg.fromMe &&
+          !isGroup &&
+          numerosSecretaria.has(numeroDe(msg.autorId ?? chatId));
 
         if (!isConversaPropria && !isSecretaria) {
-          console.log(`[msg ignorada] chat=${chatId} from=${msg.from} to=${msg.to}`);
+          console.log(`[msg ignorada] chat=${chatId} autor=${msg.autorId} fromMe=${msg.fromMe}`);
           return;
         }
 
@@ -458,10 +432,13 @@ async function main() {
         let texto = msg.body;
         let prefixoAudio = '';
         if (isAudio) {
-          const media = await msg.downloadMedia();
-          if (!media?.data) return;
+          const dadosAudio = await msg.baixarAudio().catch((err) => {
+            console.error('Falha ao baixar áudio:', err.message);
+            return null;
+          });
+          if (!dadosAudio) return;
           console.log(`[${new Date().toISOString()}] Áudio recebido (${origem}), transcrevendo...`);
-          texto = await transcreverAudio(media.data);
+          texto = await transcreverAudio(dadosAudio);
           if (!texto) {
             await enviarPara(chatId, t('audio.fail'));
             return;
@@ -497,7 +474,7 @@ async function main() {
       } catch (err) {
         console.error('Erro ao processar comando:', err.message);
         try {
-          await enviarPara(msg.fromMe ? msg.to : msg.from, t('err.exec', { err: err.message }));
+          await enviarPara(msg.chatId, t('err.exec', { err: err.message }));
         } catch {}
       }
     });
@@ -518,7 +495,7 @@ async function main() {
   await whatsapp.initialize();
 }
 
-// desligamento gracioso: fecha o Chrome antes de sair (evita corromper a sessão)
+// desligamento gracioso: fecha o socket antes de sair
 for (const sinal of ['SIGINT', 'SIGTERM']) {
   process.on(sinal, async () => {
     console.log(`Recebido ${sinal}, encerrando...`);

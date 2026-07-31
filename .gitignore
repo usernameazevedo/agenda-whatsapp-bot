@@ -5,6 +5,7 @@ node_modules/
 credentials.json
 token.json
 .wwebjs_auth/
+.baileys_auth/
 .wwebjs_cache/
 src/config.js
 
