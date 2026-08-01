@@ -61,7 +61,7 @@ Para parar, é só mandar algo com um verbo de conclusão + uma palavra do títu
 
 | Camada | Tecnologia |
 |---|---|
-| WhatsApp | [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js) (WhatsApp Web via Chrome headless) |
+| WhatsApp | [Baileys](https://github.com/WhiskeySockets/Baileys) (protocolo do WhatsApp por WebSocket, sem navegador) |
 | Calendário | Google Calendar API oficial (OAuth 2.0) |
 | Interpretação de frases | [Claude Haiku](https://www.anthropic.com/claude) (~US$ 0,001/mensagem; resumos automáticos não usam IA) |
 | Datas em PT-BR | chrono-node |
@@ -71,7 +71,7 @@ Para parar, é só mandar algo com um verbo de conclusão + uma palavra do títu
 ## 🚀 Instalação
 
 ### Pré-requisitos
-- Node.js 18+ e Google Chrome instalados
+- Node.js 20+ (não precisa de navegador: o bot fala o protocolo direto)
 - Conta Google e uma chave da [API da Anthropic](https://console.anthropic.com/) (opcional — sem ela, só os comandos fixos funcionam)
 
 ### 1. Clone e instale
@@ -109,12 +109,12 @@ pm2 save
 pm2 startup   # siga a instrução exibida para iniciar no boot
 ```
 
-> **macOS:** edite o plist gerado pelo `pm2 startup` trocando `/bin/sh -c` por `/bin/zsh -l -c` — sem shell de login, o Chrome trava na inicialização (aprendemos isso do jeito difícil, veja abaixo).
+> **macOS:** edite o plist gerado pelo `pm2 startup` trocando `/bin/sh -c` por `/bin/zsh -l -c`. Sem shell de login, o processo herda um ambiente mínimo e não acha o Node.
 
 ### 5. Ou rodar num servidor (Docker)
 
-Para tirar o Chromium do seu computador, há uma imagem pronta para VPS Linux ARM
-ou x86:
+Para o bot funcionar mesmo com seu computador desligado, há uma imagem pronta
+para VPS Linux (ARM ou x86), com menos de 300 MB:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d --build
@@ -129,8 +129,8 @@ Este projeto passou por uma jornada de depuração real. Os pepinos e as soluç�
 
 1. **QR rejeitado ("não é possível conectar novos aparelhos")** → `whatsapp-web.js` desatualizado. Sempre use `@latest`.
 2. **Suas mensagens ignoradas pelo bot** → o WhatsApp migrou chats para o formato `@lid`; o ID do seu chat pode não ser `seunumero@c.us`. O log mostra o ID real — adicione em `chatsExtras`.
-3. **"Execution context was destroyed" em loop** → reinícios abruptos deixam processos Chrome órfãos travando o perfil. Soluções incluídas: desligamento gracioso (SIGTERM → `destroy()`) e `start.sh` que limpa órfãos e locks antes de cada início.
-4. **Trava no boot (processo "online" mas nunca conecta)** → o pm2 iniciado pelo sistema herda ambiente mínimo e o Chrome não sobe. Solução: shell de login no plist/systemd + delay de 20s.
+3. **O navegador era o gargalo** → na fase em que o bot usava o `whatsapp-web.js`, o Chromium headless segurava 1,3 GB de RAM ligado 24h, deixava processos órfãos travando o perfil a cada reinício abrupto e quebrava a cada mudança do WhatsApp Web. A migração para o Baileys, que fala o protocolo por WebSocket, derrubou o consumo para menos de 60 MB e eliminou essa classe inteira de problema.
+4. **Reconectar exige cuidado** → ao contrário de uma biblioteca com navegador, aqui a queda de conexão não mata o processo: o evento de conexão estabelecida dispara de novo a cada reconexão. Registrar agendamentos e handlers dentro dele duplica tudo (no nosso teste, 21 vezes em 3 minutos). Registre uma vez por processo, e ao recriar o socket encerre o anterior e solte seus listeners, senão as conexões se multiplicam até o WhatsApp derrubar todas com `conflict`.
 5. **Fluxo OAuth de "colar código" não existe mais** → o Google exige redirect; este projeto sobe um servidor local em `localhost:3535` que captura a autorização sozinho.
 6. **Tudo isso agora é auto-recuperável** → o watchdog interno detecta travamento/desconexão e força um renascimento limpo via pm2.
 
@@ -160,7 +160,7 @@ Tudo em `src/config.js`: idioma, horários dos resumos (cron), antecedência dos
 
 ## ⚠️ Avisos
 
-- `whatsapp-web.js` automatiza o WhatsApp Web e **não é oficial** — para uso pessoal de baixo volume é o padrão da comunidade, mas a Meta pode mudar as regras. A alternativa oficial é a WhatsApp Business Cloud API.
+- O Baileys implementa o protocolo do WhatsApp e **não é oficial** — para uso pessoal de baixo volume é o padrão da comunidade, mas a Meta pode mudar as regras. A alternativa oficial é a WhatsApp Business Cloud API.
 - Nunca commite `credentials.json`, `token.json`, `src/config.js` nem `.wwebjs_auth/` (o `.gitignore` já cuida disso).
 
 ## 📄 Licença
