@@ -84,6 +84,23 @@ export class WhatsApp {
     this.reconexoes = 0;
     this.meuJid = null;
     this.salvarCredenciais = null;
+    // Cada socket criado ganha um número. Eventos de sockets antigos (que ainda
+    // estão fechando) são descartados: sem isso, o "close" de um socket morto
+    // dispara mais uma reconexão, e as conexões se multiplicam até o WhatsApp
+    // derrubar todas com "Stream Errored (conflict)".
+    this.geracao = 0;
+  }
+
+  // Encerra o socket atual e solta seus listeners antes de criar outro.
+  encerrarSocket() {
+    if (!this.sock) return;
+    try {
+      this.sock.ev.removeAllListeners('creds.update');
+      this.sock.ev.removeAllListeners('connection.update');
+      this.sock.ev.removeAllListeners('messages.upsert');
+      this.sock.end(undefined);
+    } catch { /* socket já estava morto */ }
+    this.sock = null;
   }
 
   on(evento, callback) {
@@ -100,11 +117,14 @@ export class WhatsApp {
   }
 
   async initialize() {
+    this.encerrarSocket();
+    const geracao = ++this.geracao;
+
     const { state, saveCreds } = await useMultiFileAuthState(PASTA_AUTH);
     this.salvarCredenciais = saveCreds;
     const { version } = await fetchLatestBaileysVersion();
 
-    this.sock = makeWASocket({
+    const sock = makeWASocket({
       version,
       auth: state,
       logger: loggerSilencioso,
@@ -114,13 +134,19 @@ export class WhatsApp {
       markOnlineOnConnect: false,
       syncFullHistory: false,
     });
+    this.sock = sock;
 
-    this.sock.ev.on('creds.update', saveCreds);
-    this.sock.ev.on('connection.update', (u) => this.aoAtualizarConexao(u));
-    this.sock.ev.on('messages.upsert', (u) => this.aoReceberMensagens(u));
+    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('connection.update', (u) => this.aoAtualizarConexao(u, geracao));
+    sock.ev.on('messages.upsert', (u) => {
+      if (geracao === this.geracao) this.aoReceberMensagens(u);
+    });
   }
 
-  aoAtualizarConexao({ connection, lastDisconnect, qr }) {
+  aoAtualizarConexao({ connection, lastDisconnect, qr }, geracao) {
+    // Evento de socket antigo: ignorar, senão vira reconexão em cascata.
+    if (geracao !== undefined && geracao !== this.geracao) return;
+
     if (qr) this.emitir('qr', qr);
 
     if (connection === 'open') {
@@ -215,9 +241,7 @@ export class WhatsApp {
 
   async destroy() {
     this.encerrando = true;
-    try {
-      this.sock?.end(undefined);
-    } catch { /* socket já fechado */ }
+    this.encerrarSocket();
     this.conectado = false;
   }
 }

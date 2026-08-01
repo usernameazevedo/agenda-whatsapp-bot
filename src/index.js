@@ -313,6 +313,12 @@ async function processarOutboxInterno() {
 async function main() {
   const auth = await getAuthClient();
 
+  // Diferente do whatsapp-web.js (onde uma queda matava o processo), aqui a
+  // camada de WhatsApp reconecta sozinha e "ready" dispara de novo a cada
+  // reconexão. Agendamentos e handler de mensagens são registrados UMA vez:
+  // sem isto, cada reconexão duplicaria os crons e as respostas.
+  let jaConfigurado = false;
+
   whatsapp.on('ready', async () => {
     conectado = true;
     aguardandoQr = false;
@@ -320,6 +326,9 @@ async function main() {
     console.log('WhatsApp conectado.');
     await resolverGrupo();
     await avisarRecuperacao();
+
+    if (jaConfigurado) return;
+    jaConfigurado = true;
 
     const modoTeste = process.argv.indexOf('--now');
     if (modoTeste !== -1) {
