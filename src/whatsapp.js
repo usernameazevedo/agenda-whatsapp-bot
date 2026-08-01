@@ -202,8 +202,12 @@ export class WhatsApp {
       this.emitir('message', {
         chatId: m.key.remoteJid,
         fromMe: Boolean(m.key.fromMe),
-        // Em grupo, participant identifica quem falou; fora dele é o próprio chat.
-        autorId: m.key.participant ?? m.key.remoteJid,
+        // Em grupo, participant identifica quem falou; fora dele é o próprio
+        // chat. Atenção ao `||`: em conversas diretas por @lid o Baileys manda
+        // participant como string VAZIA, e com `??` o autor ficaria em branco —
+        // o que fazia toda mensagem da secretária ser descartada como se fosse
+        // de um desconhecido.
+        autorId: m.key.participant || m.key.remoteJid,
         body: textoDaMensagem(conteudo),
         isAudio: Boolean(audio),
         nome: m.pushName ?? null,

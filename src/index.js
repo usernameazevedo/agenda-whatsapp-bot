@@ -428,7 +428,7 @@ async function main() {
           !isConversaPropria &&
           !msg.fromMe &&
           !isGroup &&
-          numerosSecretaria.has(numeroDe(msg.autorId ?? chatId));
+          numerosSecretaria.has(numeroDe(msg.autorId || chatId));
 
         if (!isConversaPropria && !isSecretaria) {
           console.log(`[msg ignorada] chat=${chatId} autor=${msg.autorId} fromMe=${msg.fromMe}`);
