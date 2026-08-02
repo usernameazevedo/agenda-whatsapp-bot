@@ -163,6 +163,22 @@ export function postergarPendentes(hoje = hojeStr()) {
   return movidas.length;
 }
 
+// ─── destaque das tarefas da secretária ──────────────────────────────────────
+// Tarefas que citam o nome dela ("pedir para Júlia", "Júlia:", "conferir com a
+// Júlia") ganham marcador e negrito para saltar aos olhos na lista do dia.
+const MARCA_SECRETARIA = '👩‍💼';
+
+const semAcento = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Fronteira de palavra evita marcar "Juliana"/"Juliano" por engano.
+const REGEX_SECRETARIA = CONFIG.secretariaNome
+  ? new RegExp(`\\b${semAcento(CONFIG.secretariaNome).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+  : null;
+
+export function mencionaSecretaria(texto) {
+  return REGEX_SECRETARIA ? REGEX_SECRETARIA.test(semAcento(texto ?? '')) : false;
+}
+
 // "DD/MM" para exibição
 export function dataCurta(data) {
   const [, m, d] = data.split('-');
@@ -174,7 +190,10 @@ export function dataCurta(data) {
 export function fechamentoDoDia(data = hojeStr()) {
   const doDia = tarefasDoDia(data);
   if (doDia.length === 0) return null;
-  const linhas = doDia.map((x) => `${x.feito ? '✅' : '❌'} ${x.texto}`);
+  const linhas = doDia.map((x) => {
+    const texto = mencionaSecretaria(x.texto) ? `${MARCA_SECRETARIA} *${x.texto}*` : x.texto;
+    return `${x.feito ? '✅' : '❌'} ${texto}`;
+  });
   const pendentes = doDia.filter((x) => !x.feito).length;
   return { lista: linhas.join('\n'), pendentes };
 }
@@ -187,6 +206,8 @@ export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {
   if (doDia.length === 0) return null;
   const linha = (x, i) => {
     const icone = x.feito ? '✅' : historico || x.postergada ? '❌' : '⬜';
+    const daSecretaria = mencionaSecretaria(x.texto);
+    const texto = daSecretaria ? `${MARCA_SECRETARIA} *${x.texto}*` : x.texto;
     const sufixo = !x.feito && x.postergada ? ` ${t('task.postponed.tag')}` : '';
     const info = x.info ?? {};
     const partes = [
@@ -197,7 +218,7 @@ export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {
     const linhaInfo = partes.length ? `\n   ${partes.join(' · ')}` : '';
     const detalhes = info.detalhes ? `\n   ↳ ${info.detalhes}` : '';
     const notas = (x.notas ?? []).map((nota) => `\n   ↳ ${nota}`).join('');
-    return `${i + 1}. ${icone} ${x.texto}${sufixo}${linhaInfo}${detalhes}${notas}`;
+    return `${i + 1}. ${icone} ${texto}${sufixo}${linhaInfo}${detalhes}${notas}`;
   };
   if (historico) return doDia.map(linha).join('\n');
 

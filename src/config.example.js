@@ -31,6 +31,9 @@ export const CONFIG = {
 
   // Número da secretária/assistente (opcional — deixe null para desativar)
   secretaria: null,
+  // Primeiro nome da secretária: tarefas que citam esse nome aparecem
+  // destacadas na lista do dia. null desliga o destaque.
+  secretariaNome: process.env.SECRETARIA_NOME ?? null,
   // IDs de chat da secretária (formato antigo @c.us e novo @lid)
   secretariaChats: [],
 
