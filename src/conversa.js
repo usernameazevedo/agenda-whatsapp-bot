@@ -173,7 +173,7 @@ export async function conduzirConversa(texto, auth, key = DEFAULT_KEY) {
     const alvo = achadas[0];
     if (temCampos) atualizarInfoPorId(alvo.id, intent.campos);
     if (intent.nota) adicionarNotaPorId(alvo.id, intent.nota);
-    return t('task.note.added', { text: alvo.texto, list: formatarTarefas(alvo.data) });
+    return t('task.note.added', { text: alvo.texto, list: formatarTarefas() });
   }
 
   // tarefa do dia (a fazer sem horário): "tenho que ligar pro fulano", "preciso mandar o documento"
@@ -286,7 +286,7 @@ function tituloValido(titulo) {
 
 function criarTarefaMsg(titulo, data) {
   criarTarefa(titulo, data);
-  const lista = formatarTarefas(data);
+  const lista = formatarTarefas();
   if (data !== hojeStr()) {
     return t('task.created.date', { text: titulo, date: dataCurta(data), list: lista });
   }
@@ -328,7 +328,7 @@ async function concluirPorNome(busca, auth) {
   const tarefa = hojePendentes.find((x) => contemPalavras(x.texto, busca)) ?? buscarPendentePorTexto(busca)[0];
   if (tarefa) {
     marcarFeitaPorId(tarefa.id);
-    return t('task.done', { text: tarefa.texto, list: formatarTarefas(tarefa.data) });
+    return t('task.done', { text: tarefa.texto, list: formatarTarefas() });
   }
 
   // 2) eventos de hoje na agenda

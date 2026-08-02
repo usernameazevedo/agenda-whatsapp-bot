@@ -66,9 +66,22 @@ export function pendentesDoDia(data = hojeStr()) {
   return tarefasDoDia(data).filter((x) => !x.feito && !x.postergada);
 }
 
-// marca a tarefa nº n (1-based na lista do dia) como feita
-export function marcarFeita(n, data = hojeStr()) {
-  const doDia = tarefasDoDia(data);
+// Lista canônica que o usuário vê: TODAS as pendentes, de qualquer data
+// (ordenadas por dia), seguidas das que ele concluiu hoje. É a mesma ordem
+// usada pela numeração do check — "3 ok" marca o item 3 desta lista, então
+// nenhuma outra visão numerada pode divergir daqui.
+export function tarefasVisiveis(hoje = hojeStr()) {
+  const ativas = carregar().filter((x) => !x.postergada);
+  const porData = (a, b) => a.data.localeCompare(b.data) || a.criadoEm.localeCompare(b.criadoEm);
+  return [
+    ...ativas.filter((x) => !x.feito).sort(porData),
+    ...ativas.filter((x) => x.feito && x.data === hoje).sort(porData),
+  ];
+}
+
+// marca a tarefa nº n (1-based na lista visível) como feita
+export function marcarFeita(n) {
+  const doDia = tarefasVisiveis();
   const alvo = doDia[n - 1];
   if (!alvo) return null;
   const lista = carregar();
@@ -87,9 +100,9 @@ export function marcarFeitaPorId(id) {
   return atualizada;
 }
 
-// acrescenta uma nota (informação extra) à tarefa nº n do dia
-export function adicionarNota(n, nota, data = hojeStr()) {
-  const doDia = tarefasDoDia(data);
+// acrescenta uma nota (informação extra) à tarefa nº n da lista visível
+export function adicionarNota(n, nota) {
+  const doDia = tarefasVisiveis();
   const alvo = doDia[n - 1];
   if (!alvo) return null;
   const lista = carregar();
@@ -179,6 +192,14 @@ export function mencionaSecretaria(texto) {
   return REGEX_SECRETARIA ? REGEX_SECRETARIA.test(semAcento(texto ?? '')) : false;
 }
 
+// Pendentes que citam a secretária, de hoje em diante, em ordem de data.
+// (As atrasadas já viram tarefas de hoje no cron diário.)
+export function pendentesDaSecretaria(hoje = hojeStr()) {
+  return carregar()
+    .filter((x) => !x.feito && !x.postergada && x.data >= hoje && mencionaSecretaria(x.texto))
+    .sort((a, b) => a.data.localeCompare(b.data));
+}
+
 // "DD/MM" para exibição
 export function dataCurta(data) {
   const [, m, d] = data.split('-');
@@ -198,35 +219,55 @@ export function fechamentoDoDia(data = hojeStr()) {
   return { lista: linhas.join('\n'), pendentes };
 }
 
-// Lista do dia. historico=true mostra ✅/❌ (visão de auditoria por data);
-// historico=false agrupa pendentes e feitas em seções — o número de cada
-// tarefa é estável (posição na lista do dia), então "ok 2" continua valendo.
-export function formatarTarefas(data = hojeStr(), { historico = false } = {}) {
-  const doDia = tarefasDoDia(data);
-  if (doDia.length === 0) return null;
+// Detalhes que acompanham a tarefa (horário, local, cliente, notas).
+function complementos(x) {
+  const info = x.info ?? {};
+  const partes = [
+    info.horario ? `🕐 ${info.horario}` : null,
+    info.local ? `📍 ${info.local}` : null,
+    info.cliente ? `👤 ${info.cliente}` : null,
+  ].filter(Boolean);
+  const linhaInfo = partes.length ? `\n   ${partes.join(' · ')}` : '';
+  const detalhes = info.detalhes ? `\n   ↳ ${info.detalhes}` : '';
+  const notas = (x.notas ?? []).map((nota) => `\n   ↳ ${nota}`).join('');
+  return `${linhaInfo}${detalhes}${notas}`;
+}
+
+// Texto da tarefa, com o destaque da secretária quando ela é citada.
+function textoTarefa(x) {
+  return mencionaSecretaria(x.texto) ? `${MARCA_SECRETARIA} *${x.texto}*` : x.texto;
+}
+
+// Lista completa: pendentes de todos os dias + as concluídas hoje. A numeração
+// é a de tarefasVisiveis(), a mesma que o check usa.
+export function formatarTarefas(hoje = hojeStr()) {
+  const itens = tarefasVisiveis(hoje);
+  if (itens.length === 0) return null;
+
   const linha = (x, i) => {
-    const icone = x.feito ? '✅' : historico || x.postergada ? '❌' : '⬜';
-    const daSecretaria = mencionaSecretaria(x.texto);
-    const texto = daSecretaria ? `${MARCA_SECRETARIA} *${x.texto}*` : x.texto;
-    const sufixo = !x.feito && x.postergada ? ` ${t('task.postponed.tag')}` : '';
-    const info = x.info ?? {};
-    const partes = [
-      info.horario ? `🕐 ${info.horario}` : null,
-      info.local ? `📍 ${info.local}` : null,
-      info.cliente ? `👤 ${info.cliente}` : null,
-    ].filter(Boolean);
-    const linhaInfo = partes.length ? `\n   ${partes.join(' · ')}` : '';
-    const detalhes = info.detalhes ? `\n   ↳ ${info.detalhes}` : '';
-    const notas = (x.notas ?? []).map((nota) => `\n   ↳ ${nota}`).join('');
-    return `${i + 1}. ${icone} ${texto}${sufixo}${linhaInfo}${detalhes}${notas}`;
+    const icone = x.feito ? '✅' : '⬜';
+    const quando =
+      x.data === hoje
+        ? ''
+        : ` ${x.data < hoje ? t('task.late.tag', { date: dataCurta(x.data) }) : t('task.date.tag', { date: dataCurta(x.data) })}`;
+    return `${i + 1}. ${icone} ${textoTarefa(x)}${quando}${complementos(x)}`;
   };
-  if (historico) return doDia.map(linha).join('\n');
 
   const pendentes = [];
   const feitas = [];
-  doDia.forEach((x, i) => (x.feito ? feitas : pendentes).push(linha(x, i)));
+  itens.forEach((x, i) => (x.feito ? feitas : pendentes).push(linha(x, i)));
   const blocos = [];
   if (pendentes.length) blocos.push(`${t('task.sec.pending')}\n${pendentes.join('\n')}`);
   if (feitas.length) blocos.push(`${t('task.sec.done')}\n${feitas.join('\n')}`);
   return blocos.join('\n\n');
+}
+
+// Auditoria de um dia específico ("tarefas do dia 01/7"): ✅ feito / ❌ não
+// feito, sem numeração de check — os números aqui não valem para dar baixa.
+export function formatarHistorico(data) {
+  const doDia = tarefasDoDia(data);
+  if (doDia.length === 0) return null;
+  return doDia
+    .map((x) => `${x.feito ? '✅' : '❌'} ${textoTarefa(x)}${complementos(x)}`)
+    .join('\n');
 }

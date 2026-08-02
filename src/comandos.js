@@ -4,10 +4,30 @@ import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
 import { conduzirConversa, temPendencia, iniciarRecorrente } from './conversa.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
-import { marcarFeita, adicionarNota, formatarTarefas, normalizarData, hojeStr, dataCurta } from './tarefas.js';
+import {
+  marcarFeita,
+  adicionarNota,
+  formatarTarefas,
+  formatarHistorico,
+  normalizarData,
+  hojeStr,
+  dataCurta,
+  pendentesDaSecretaria,
+} from './tarefas.js';
 import { t, fmtHora, CMD } from './i18n.js';
 
 const emCmd = (lower, chave) => CMD[chave].includes(lower);
+
+const semAcento = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// "júlia", "tarefas da júlia", "o que tem com a júlia" — a mensagem inteira
+// precisa ser o pedido, para não confundir com uma tarefa nova ("Júlia: ...").
+const REGEX_CMD_SECRETARIA = CONFIG.secretariaNome
+  ? new RegExp(
+      `^(?:(?:tarefas?|lista|o que tem)\\s+)?(?:(?:d[aeo]s?|com|com [ao])\\s+)?` +
+        `${semAcento(CONFIG.secretariaNome).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[?!.]*$`,
+    )
+  : null;
 
 function janela(dias, offsetDias = 0) {
   const inicio = new Date();
@@ -48,6 +68,9 @@ export async function processarComando(texto, auth, origem = 'self') {
         msg.match(/^(?:nota|obs|info)\s+(\d{1,2})[:\s]+(.+)/is);
       if (nota) return notaTarefa(parseInt(nota[1], 10), nota[2]);
     }
+
+    // tudo o que está pendente com a secretária, em qualquer data
+    if (REGEX_CMD_SECRETARIA?.test(semAcento(lower))) return listarSecretariaMsg();
 
     // "lista"/"tarefas" (hoje) e "tarefas do dia 01/7" (histórico por data)
     if (CMD.tarefas.some((c) => lower === c || lower.startsWith(c + ' '))) {
@@ -147,7 +170,7 @@ function listarTarefasMsg(lower) {
   if (mData) {
     const data = normalizarData(mData[1]);
     if (!data) return t('task.list.baddate');
-    const lista = formatarTarefas(data, { historico: true });
+    const lista = formatarHistorico(data);
     if (!lista) return t('task.list.empty', { date: dataCurta(data) });
     return t('task.list.date', { date: dataCurta(data), list: lista });
   }
@@ -155,8 +178,19 @@ function listarTarefasMsg(lower) {
     return t('task.list.baddate');
   }
   const lista = formatarTarefas();
-  if (!lista) return t('task.list.empty', { date: dataCurta(hojeStr()) });
-  return t('task.list.today', { date: dataCurta(hojeStr()), list: lista });
+  if (!lista) return t('task.list.none');
+  return t('task.list.today', { list: lista });
+}
+
+function listarSecretariaMsg() {
+  const pendentes = pendentesDaSecretaria();
+  const nome = CONFIG.secretariaNome;
+  if (pendentes.length === 0) return t('task.assist.empty', { name: nome });
+  const hoje = hojeStr();
+  const linhas = pendentes
+    .map((x) => `• ${x.data === hoje ? t('task.today.word') : dataCurta(x.data)} — ${x.texto}`)
+    .join('\n');
+  return t('task.assist.header', { name: nome, n: pendentes.length, list: linhas });
 }
 
 function listarRecorrentesMsg() {

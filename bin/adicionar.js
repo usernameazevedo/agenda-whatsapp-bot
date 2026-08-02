@@ -34,7 +34,7 @@ if (modo === 'tarefa') {
   if (!texto) sair('Uso: node bin/adicionar.js tarefa "texto" [YYYY-MM-DD]');
   if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) sair(`Data inválida: ${data} (use YYYY-MM-DD)`);
   const tarefa = criarTarefa(texto, data ?? hojeStr());
-  avisarWhatsApp(`📝 Tarefa adicionada via Claude: *${tarefa.texto}* (${dataCurta(tarefa.data)})\n\n${formatarTarefas(tarefa.data)}`);
+  avisarWhatsApp(`📝 Tarefa adicionada via Claude: *${tarefa.texto}* (${dataCurta(tarefa.data)})\n\n${formatarTarefas()}`);
   console.log(`Tarefa criada para ${tarefa.data}: ${tarefa.texto}`);
 } else if (modo === 'evento') {
   const [titulo, inicioStr, duracaoStr] = args;
