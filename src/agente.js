@@ -6,7 +6,7 @@
 // deve cair no interpretar() clássico de ia.js.
 import { CONFIG } from './config.js';
 import { buscarEventoPorTitulo, listarEventos } from './calendar.js';
-import { LOCALE, fmtDataHora, fmtHora } from './i18n.js';
+import { LOCALE, fmtDataHora, fmtHora, contextoAgora } from './i18n.js';
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -24,6 +24,7 @@ Ao terminar, chame SEMPRE a ferramenta "concluir" exatamente uma vez com o resul
 - "o que tenho hoje/amanhã/na semana?" simples: acao "resumo" + periodo (o sistema formata).
 - Lembrete mensal fixo ("pagar cartão dia 10 de todo mês"): recorrente true + diaDoMes + titulo.
 - Coisa a fazer SEM horário definido ("tenho que ligar pro João", "preciso mandar o documento"): acao "tarefa" + titulo curto começando com verbo. Vai para a lista de tarefas do dia, não para a agenda. Se o usuário disser o DIA ("amanhã", "dia 14/7", "sexta"), preencha "data" com YYYY-MM-DD; sem dia dito, data null (= hoje). Se ele NÃO disse qual é a tarefa (ex.: só "tarefa dia 14/7"), deixe titulo null — NUNCA invente ou use placeholder. VÁRIAS tarefas numa frase só ("tenho que ligar pro X, tirar cópia e levar o cachorro no vet amanhã") => acao "tarefa" com a lista em "tarefas" [{titulo, data}], uma entrada por tarefa; a data dita vale só para a tarefa a que se refere (as demais ficam null = hoje). ACRESCENTAR informação a uma tarefa já existente ("na tarefa do João, o número é 9999", "coloca mais informações na tarefa X: horário 14h, local escritório, cliente Riani") => acao "tarefa_nota" com busca = trecho que identifica a tarefa. Se ele der horário/local/cliente/detalhes, preencha "campos" {horario, local, cliente, detalhes} (só os ditos); informação solta que não é nenhum desses vai em "nota". NUNCA pergunte pelos campos na criação da tarefa — eles só existem quando o usuário pede para acrescentar.
+- Mensagem que COMEÇA com "tarefa"/"tarefas" (ex.: "Tarefas para a Júlia: verificar os pontos X, entrar em contato com a Marcela...") é SEMPRE acao "tarefa", mesmo longa e ditada por voz — nunca "nada". Extraia cada item como uma tarefa curta e mantenha o responsável no título (ex.: "Júlia: falar com a Marcela sobre disponibilidade amanhã p/ vídeos do Macaé Festival"). Para "amanhã"/dias da semana, use a tabela de datas do topo — nunca calcule.
 - "me lembra de X" COM dia/horário definido => acao agendar com lembrete true. Reuniões/consultas => lembrete false.
 - NUNCA invente horário que o usuário não disse — exceto quando ele pediu explicitamente para você escolher (ex.: "no primeiro horário livre"), aí consulte horarios_livres e use o slot real.
 - Usuário AVISA que concluiu algo ("Gravação Hugo, feito", "feito a gravação", "ok, mandei o documento", "já liguei pro João") => acao "concluir" com busca = nome da coisa concluída (curto). Só "feito"/"ok" sem dizer o quê => acao "concluir" com busca null.
@@ -40,6 +41,7 @@ When done, ALWAYS call the "concluir" tool exactly once:
 - Simple "what do I have today/tomorrow/this week?": acao "resumo" + periodo.
 - Fixed monthly reminder: recorrente true + diaDoMes + titulo.
 - To-do WITHOUT a set time ("I have to call John", "I need to send the document"): acao "tarefa" + short verb-first titulo. Goes to the day's task list, not the calendar. If the user names a DAY ("tomorrow", "on 7/14", "Friday"), fill "data" with YYYY-MM-DD; no day mentioned, data null (= today). If they did NOT say what the task is (e.g. just "task on 7/14"), leave titulo null — NEVER invent or use a placeholder. SEVERAL tasks in one phrase ("I have to call X, copy the doc and take the dog to the vet tomorrow") => acao "tarefa" with the list in "tarefas" [{titulo, data}], one entry per task; a stated day applies only to the task it refers to (others null = today). ADDING info to an existing task ("on the John task, the number is 9999", "add more info to task X: time 2pm, place office, client Riani") => acao "tarefa_nota" with busca = snippet identifying the task. If they give time/place/client/details, fill "campos" {horario, local, cliente, detalhes} (only what was said); loose info that fits none goes in "nota". NEVER ask for these fields at task creation — they only exist when the user asks to add info.
+- A message STARTING with "task"/"tasks" (e.g. "Tasks for Julia: check X, contact Marcela...") is ALWAYS acao "tarefa", even long dictated speech — never "nada". Extract each item as a short task, keeping the assignee in the title. For "tomorrow"/weekdays, use the date table at the top — never compute.
 - "remind me to X" WITH a set day/time => acao agendar with lembrete true. Meetings/appointments => lembrete false.
 - NEVER invent a time the user didn't say — unless they explicitly asked you to pick (e.g. "first free slot"); then use horarios_livres and pick a real slot.
 - User REPORTS finishing something ("Hugo recording, done", "already called John") => acao "concluir" with busca = the finished thing (short). Bare "done"/"ok" => acao "concluir", busca null.
@@ -192,10 +194,7 @@ async function chamarAPI(body) {
 export async function interpretarComAgente(texto, auth, contexto = []) {
   if (!API_KEY) return null;
 
-  const system = (LOCALE === 'en' ? SYSTEM_EN : SYSTEM_PT).replace(
-    '{AGORA}',
-    new Date().toLocaleString(LOCALE === 'en' ? 'en-US' : 'pt-BR', { timeZone: 'America/Sao_Paulo' })
-  );
+  const system = (LOCALE === 'en' ? SYSTEM_EN : SYSTEM_PT).replace('{AGORA}', contextoAgora());
   // mensagens recentes do usuário como contexto — a atual pode referenciá-las
   // ("marca o dentista com essas informações" após encaminhar uma confirmação)
   const conteudo = contexto.length

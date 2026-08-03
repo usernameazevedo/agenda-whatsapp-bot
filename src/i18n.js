@@ -22,6 +22,30 @@ export const fmtDiaSemana = fmtDia;
 
 export const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Contexto de data para os prompts da IA: tabela pronta com hoje, amanhã e os
+// próximos 7 dias já resolvidos em YYYY-MM-DD. Elimina o cálculo de data pelo
+// modelo — "amanhã"/"terça" viram lookup, não aritmética (que já errou em produção).
+export function contextoAgora() {
+  const tz = CONFIG.timezone;
+  const isoDe = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
+  const diaDe = (d) => new Intl.DateTimeFormat(intlLocale, { weekday: 'long', timeZone: tz }).format(d);
+  const hora = new Intl.DateTimeFormat(intlLocale, {
+    hour: '2-digit', minute: '2-digit', hour12: use12h, timeZone: tz,
+  }).format(new Date());
+
+  const dias = [];
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(Date.now() + i * 24 * 60 * 60 * 1000);
+    const rotulo = i === 0 ? (LOCALE === 'en' ? 'today' : 'hoje')
+      : i === 1 ? (LOCALE === 'en' ? 'tomorrow' : 'amanhã')
+      : diaDe(d);
+    dias.push(`${rotulo} (${diaDe(d)}) = ${isoDe(d)}`);
+  }
+  return LOCALE === 'en'
+    ? `now ${hora}. Date table (USE THIS, never compute dates yourself):\n${dias.join(' · ')}`
+    : `agora ${hora}. Tabela de datas (USE ESTA TABELA, nunca calcule datas por conta própria):\n${dias.join(' · ')}`;
+}
+
 // ─── detecção de sim/não (aceita os dois idiomas, é mais tolerante) ───────────
 export const ehSim = (t) => /^(s|sim|pode|isso|confirmo|confirmar|y|yes|yep|yup|ok|okay|sure|confirm)\b/i.test(t.trim());
 export const ehNao = (t) => /^(n|n[ãa]o|deixa|cancela|no|nope|cancel|nvm|nevermind)\b/i.test(t.trim());

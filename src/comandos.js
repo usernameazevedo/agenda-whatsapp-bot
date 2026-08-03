@@ -29,6 +29,26 @@ const REGEX_CMD_SECRETARIA = CONFIG.secretariaNome
     )
   : null;
 
+// Normaliza mensagem ditada por voz para o parser de check: números por
+// extenso viram dígitos ("um, dois, vinte e três, ok" → "1, 2, 23, ok") e a
+// pontuação final da transcrição ("ok.") é removida.
+const NUM_PALAVRA = {
+  um: 1, uma: 1, dois: 2, duas: 2, tres: 3, 'três': 3, quatro: 4, cinco: 5,
+  seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13,
+  quatorze: 14, catorze: 14, quinze: 15, dezesseis: 16, dezessete: 17,
+  dezoito: 18, dezenove: 19, vinte: 20, trinta: 30,
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+  nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+
+function normalizarVoz(lower) {
+  return lower
+    .replace(/\b(vinte|trinta)\s+e\s+(um|uma|dois|duas|tres|três|quatro|cinco|seis|sete|oito|nove)\b/g,
+      (_, dez, unidade) => String(NUM_PALAVRA[dez] + NUM_PALAVRA[unidade]))
+    .replace(/\b([a-zà-ú]+)\b/g, (palavra) => NUM_PALAVRA[palavra] ?? palavra)
+    .replace(/[.!?\s]+$/, '');
+}
+
 function janela(dias, offsetDias = 0) {
   const inicio = new Date();
   inicio.setHours(0, 0, 0, 0);
@@ -54,9 +74,10 @@ export async function processarComando(texto, auth, origem = 'self') {
     // (o dono recebe aviso da ação dela via index.js)
     {
       const NUMS = String.raw`\d{1,2}(?:\s*[,;e&+]?\s+\d{1,2}|\s*[,;]\s*\d{1,2})*`;
+      const lowerVoz = normalizarVoz(lower); // "Um, dois e cinco, ok." → "1, 2 e 5, ok"
       const check =
-        lower.match(new RegExp(`^(${NUMS})\\s*[.\\-),]?\\s*(?:feito|feita|feitas|done|ok)\\s*$`)) ||
-        lower.match(new RegExp(`^(?:feito|feita|feitas|done|ok)[:\\s]\\s*(${NUMS})\\s*$`));
+        lowerVoz.match(new RegExp(`^(${NUMS})\\s*[.\\-),]?\\s*(?:feito|feita|feitas|done|ok)\\s*$`)) ||
+        lowerVoz.match(new RegExp(`^(?:feito|feita|feitas|done|ok)[:\\s,]\\s*(${NUMS})\\s*$`));
       if (check) {
         const numeros = [...new Set(check[1].match(/\d{1,2}/g).map(Number))];
         return darCheckTarefas(numeros);
