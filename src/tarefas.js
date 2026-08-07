@@ -40,10 +40,20 @@ export function normalizarData(texto) {
   return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
+// Próximo número fixo: 1 + o maior número em uso entre as tarefas visíveis.
+// O número pertence à tarefa (não à posição) e só muda na renumeração diária.
+function proximoNum(lista, hoje = hojeStr()) {
+  const emUso = lista
+    .filter((x) => !x.postergada && (!x.feito || x.data === hoje))
+    .map((x) => x.num ?? 0);
+  return Math.max(0, ...emUso) + 1;
+}
+
 export function criarTarefa(texto, data = hojeStr()) {
   const lista = carregar();
   const tarefa = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    num: proximoNum(lista),
     texto: texto.trim(),
     data,
     feito: false,
@@ -56,6 +66,17 @@ export function criarTarefa(texto, data = hojeStr()) {
   return tarefa;
 }
 
+// Renumeração diária (cron das 7h, antes do resumo): compacta os números na
+// ordem da lista visível. Fora daqui, número de tarefa NUNCA muda.
+export function renumerarVisiveis(hoje = hojeStr()) {
+  const visiveis = tarefasVisiveis(hoje);
+  const numPorId = new Map(visiveis.map((x, i) => [x.id, i + 1]));
+  const lista = carregar().map((x) =>
+    numPorId.has(x.id) ? { ...x, num: numPorId.get(x.id) } : x,
+  );
+  salvar(lista);
+}
+
 export function tarefasDoDia(data = hojeStr()) {
   return carregar()
     .filter((x) => x.data === data)
@@ -66,23 +87,30 @@ export function pendentesDoDia(data = hojeStr()) {
   return tarefasDoDia(data).filter((x) => !x.feito && !x.postergada);
 }
 
-// Lista canônica que o usuário vê: TODAS as pendentes, de qualquer data
-// (ordenadas por dia), seguidas das que ele concluiu hoje. É a mesma ordem
-// usada pela numeração do check — "3 ok" marca o item 3 desta lista, então
-// nenhuma outra visão numerada pode divergir daqui.
+// Lista canônica que o usuário vê: TODAS as pendentes, de qualquer data,
+// seguidas das que ele concluiu hoje. Ordenada pelo número FIXO de cada
+// tarefa — o mesmo que o check usa ("3 ok" marca a tarefa de número 3).
 export function tarefasVisiveis(hoje = hojeStr()) {
   const ativas = carregar().filter((x) => !x.postergada);
-  const porData = (a, b) => a.data.localeCompare(b.data) || a.criadoEm.localeCompare(b.criadoEm);
+  const porNum = (a, b) =>
+    (a.num ?? Infinity) - (b.num ?? Infinity) ||
+    a.data.localeCompare(b.data) ||
+    a.criadoEm.localeCompare(b.criadoEm);
   return [
-    ...ativas.filter((x) => !x.feito).sort(porData),
-    ...ativas.filter((x) => x.feito && x.data === hoje).sort(porData),
+    ...ativas.filter((x) => !x.feito).sort(porNum),
+    ...ativas.filter((x) => x.feito && x.data === hoje).sort(porNum),
   ];
 }
 
-// marca a tarefa nº n (1-based na lista visível) como feita
+// tarefa de número fixo n na lista visível (posição como fallback de legado)
+function porNumero(n) {
+  const visiveis = tarefasVisiveis();
+  return visiveis.find((x) => x.num === n) ?? (visiveis.some((x) => x.num != null) ? null : visiveis[n - 1]);
+}
+
+// marca a tarefa de número n como feita
 export function marcarFeita(n) {
-  const doDia = tarefasVisiveis();
-  const alvo = doDia[n - 1];
+  const alvo = porNumero(n);
   if (!alvo) return null;
   const lista = carregar();
   const idx = lista.findIndex((x) => x.id === alvo.id);
@@ -100,10 +128,9 @@ export function marcarFeitaPorId(id) {
   return atualizada;
 }
 
-// acrescenta uma nota (informação extra) à tarefa nº n da lista visível
+// acrescenta uma nota (informação extra) à tarefa de número n
 export function adicionarNota(n, nota) {
-  const doDia = tarefasVisiveis();
-  const alvo = doDia[n - 1];
+  const alvo = porNumero(n);
   if (!alvo) return null;
   const lista = carregar();
   const idx = lista.findIndex((x) => x.id === alvo.id);
@@ -162,6 +189,7 @@ export function postergarPendentes(hoje = hojeStr()) {
   for (const x of movidas) {
     nova.push({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      num: x.num, // a tarefa postergada mantém o número que o usuário conhece
       texto: x.texto,
       notas: x.notas ?? [],
       info: x.info ?? {},
@@ -250,7 +278,7 @@ export function formatarTarefas(hoje = hojeStr()) {
       x.data === hoje
         ? ''
         : ` ${x.data < hoje ? t('task.late.tag', { date: dataCurta(x.data) }) : t('task.date.tag', { date: dataCurta(x.data) })}`;
-    return `${i + 1}. ${icone} ${textoTarefa(x)}${quando}${complementos(x)}`;
+    return `${x.num ?? i + 1}. ${icone} ${textoTarefa(x)}${quando}${complementos(x)}`;
   };
 
   const pendentes = [];

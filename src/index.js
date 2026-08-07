@@ -7,7 +7,7 @@ import { resumoDiario, resumoSemanal } from './formatar.js';
 import { processarComando } from './comandos.js';
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
-import { postergarPendentes, formatarTarefas, fechamentoDoDia, criarTarefa } from './tarefas.js';
+import { postergarPendentes, formatarTarefas, fechamentoDoDia, criarTarefa, renumerarVisiveis } from './tarefas.js';
 import { paraCobrar, atualizarFollowup } from './followups.js';
 import { transcreverAudio, audioDisponivel } from './audio.js';
 import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
@@ -137,6 +137,8 @@ async function executarDiario(auth) {
     criarTarefa(t('followup.chase.title', { client: f.cliente }));
     atualizarFollowup(f.id, { status: 'na_lista' });
   }
+  // única renumeração do dia: a lista das 7h define os números até amanhã
+  renumerarVisiveis();
   const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
   let msg = resumoDiario(eventos, hoje, t('daily.title.morning'), formatarTarefas());
   if (movidas > 0) msg += `\n${t('task.postponed.auto', { n: movidas })}`;
