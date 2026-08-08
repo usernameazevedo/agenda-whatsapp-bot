@@ -37,6 +37,10 @@ export const CONFIG = {
   // IDs de chat da secretária (formato antigo @c.us e novo @lid)
   secretariaChats: [],
 
+  // Tarefas mensais fixas: no dia indicado, o texto entra na lista de tarefas
+  // do dia (cron das 7h). Ex.: { dia: 8, texto: 'Pagar cartão' }
+  tarefasMensais: [],
+
   // IDs dos calendários a incluir ('primary' = principal).
   // Envie "agendas" no WhatsApp para ver os IDs disponíveis.
   calendarios: ['primary'],

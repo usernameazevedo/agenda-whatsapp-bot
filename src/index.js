@@ -7,7 +7,7 @@ import { resumoDiario, resumoSemanal } from './formatar.js';
 import { processarComando } from './comandos.js';
 import { lembretesParaAgora } from './recorrentes.js';
 import { verificarLembretes } from './lembretes.js';
-import { postergarPendentes, formatarTarefas, fechamentoDoDia, criarTarefa, renumerarVisiveis } from './tarefas.js';
+import { postergarPendentes, formatarTarefas, fechamentoDoDia, criarTarefa, renumerarVisiveis, tarefasVisiveis, hojeStr } from './tarefas.js';
 import { paraCobrar, atualizarFollowup } from './followups.js';
 import { transcreverAudio, audioDisponivel } from './audio.js';
 import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
@@ -132,6 +132,13 @@ async function executarDiario(auth) {
   const hoje = inicioDoDia(new Date());
   // postergação automática: pendentes de ontem ganham ❌ no histórico e cópia hoje
   const movidas = postergarPendentes();
+  // tarefas mensais fixas do config entram na lista no dia marcado
+  const diaDoMes = Number(hojeStr().slice(-2));
+  for (const m of CONFIG.tarefasMensais ?? []) {
+    if (m.dia !== diaDoMes) continue;
+    const jaExiste = tarefasVisiveis().some((x) => !x.feito && x.texto === m.texto);
+    if (!jaExiste) criarTarefa(m.texto);
+  }
   // cobranças de orçamento vencidas viram linha na lista do dia (sem interrogatório)
   for (const f of paraCobrar()) {
     criarTarefa(t('followup.chase.title', { client: f.cliente }));
