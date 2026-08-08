@@ -63,13 +63,9 @@ export async function processarComando(texto, auth, origem = 'self') {
 
   // comandos rápidos só valem quando não há conversa em andamento
   if (!temPendencia(origem)) {
-    // baixa de lembrete recorrente insistente (ex.: "paguei o cartão")
-    if (origem === 'self') {
-      const quitado = tentarCheck(msg);
-      if (quitado) return t('rec.check.done', { title: quitado.titulo });
-    }
-
-    // check de tarefa: "1. feito", "2 ok", "ok 3", e múltiplos numa frase só
+    // check de tarefa POR NÚMERO vem ANTES do check de recorrente: "8 ok" é
+    // sempre tarefa nº 8, nunca baixa do lembrete mensal (bug real: 08/08/2026)
+    // "1. feito", "2 ok", "ok 3", e múltiplos numa frase só
     // ("11, 20, 13 ok" / "ok 11 20 13") — vale também para a secretária
     // (o dono recebe aviso da ação dela via index.js)
     {
@@ -88,6 +84,13 @@ export async function processarComando(texto, auth, origem = 'self') {
         msg.match(/^(\d{1,2})\s*[.\-)]?\s*(?:nota|obs|info)[:\s]+(.+)/is) ||
         msg.match(/^(?:nota|obs|info)\s+(\d{1,2})[:\s]+(.+)/is);
       if (nota) return notaTarefa(parseInt(nota[1], 10), nota[2]);
+    }
+
+    // baixa de lembrete recorrente insistente (ex.: "paguei o cartão") —
+    // depois do check numérico, para nunca capturar "8 ok"
+    if (origem === 'self') {
+      const quitado = tentarCheck(msg);
+      if (quitado) return t('rec.check.done', { title: quitado.titulo });
     }
 
     // tudo o que está pendente com a secretária, em qualquer data

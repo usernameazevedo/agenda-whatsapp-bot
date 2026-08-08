@@ -123,8 +123,9 @@ export function tentarCheck(mensagem) {
   let alvo = null;
   if (porTitulo.length === 1) {
     alvo = porTitulo[0];
-  } else if (porTitulo.length === 0) {
-    // sem palavra do título: só dá baixa se houver exatamente um na janela ativa
+  } else if (porTitulo.length === 0 && !/\d/.test(mensagem)) {
+    // sem palavra do título: só dá baixa se houver exatamente um na janela
+    // ativa E a mensagem não tiver número (número = check de tarefa, ex. "8 ok")
     const ativos = lista.filter((r) => cicloAtivo(r.diaDoMes));
     if (ativos.length === 1) alvo = ativos[0];
   }
