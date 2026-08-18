@@ -9,8 +9,8 @@
 # Em vez de tentar lançar às cegas, o laço consulta o relatório de capacidade
 # (barato e instantâneo) e só chama o launch quando a shape aparece AVAILABLE.
 #
-#   deploy/oracle-launch-retry.sh              # sonda a cada 30s
-#   INTERVALO=60 deploy/oracle-launch-retry.sh # sonda a cada 60s
+#   deploy/oracle-launch-retry.sh              # sonda a cada 45s
+#   INTERVALO=90 deploy/oracle-launch-retry.sh # sonda a cada 90s
 #
 # Ao conseguir, grava OCID e IP em deploy/.oracle-instance e avisa no WhatsApp.
 #
@@ -95,35 +95,46 @@ status_capacidade() {
 tentativa=0
 espera=0
 falhas_seguidas=0
+sem_rede=0
 
 while true; do
   status="$(status_capacidade)"
 
   case "$status" in
     AVAILABLE)
-      falhas_seguidas=0
+      falhas_seguidas=0; sem_rede=0
       ;;
     ERRO*TooManyRequests*|ERRO*429*)
-      # Sondar de 30 em 30s às vezes bate no limite da API. Não é problema de
+      # Sondar de 45 em 45s às vezes bate no limite da API. Não é problema de
       # conta e não conta como falha: é só recuar e voltar.
       registrar "sondagem levou rate limit, recuando 5 min"
       sleep 300
       continue
       ;;
+    ERRO*RequestException*|ERRO*ConnectTimeout*|ERRO*ReadTimeout*|ERRO*[Cc]onnection*|ERRO*[Nn]ame\ or\ service*)
+      # Sem rede. Na prática isso é o MacBook dormindo (Maintenance Sleep na
+      # bateria), não problema de conta — não pode contar como falha fatal,
+      # senão uma noite de sono fecha o laço. Só esperar a máquina voltar.
+      sem_rede=$((sem_rede + 1))
+      [ $((sem_rede % 10)) -eq 1 ] && registrar "sem rede ($sem_rede) — provavelmente o Mac dormiu, aguardando"
+      sleep 120
+      continue
+      ;;
     ERRO*)
       falhas_seguidas=$((falhas_seguidas + 1))
       registrar "sondagem falhou ($falhas_seguidas): $status"
-      # Uma falha isolada é rede oscilando; dez seguidas é problema de conta.
-      if [ "$falhas_seguidas" -ge 10 ]; then
-        registrar "10 sondagens seguidas com erro — parando para revisão humana"
-        avisar "Laço da Oracle parou: a consulta de capacidade está falhando. Ver deploy/oracle-launch-retry.log"
+      # Aqui só sobra erro de conta mesmo: credencial, permissão, política.
+      # Isso nenhuma espera resolve, então para e chama o humano.
+      if [ "$falhas_seguidas" -ge 5 ]; then
+        registrar "5 sondagens seguidas com erro de conta — parando para revisão humana"
+        avisar "Laço da Oracle parou: erro de credencial ou permissão. Ver deploy/oracle-launch-retry.log"
         exit 0
       fi
       sleep "$INTERVALO"
       continue
       ;;
     *)
-      falhas_seguidas=0
+      falhas_seguidas=0; sem_rede=0
       espera=$((espera + 1))
       # Um registro a cada 20 sondagens para o log não virar ruído.
       [ $((espera % 20)) -eq 1 ] && registrar "sondagem $espera: $status"
