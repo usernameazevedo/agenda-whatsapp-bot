@@ -40,10 +40,28 @@ deploy/oracle-launch-retry.sh          # vigia a capacidade e lança quando abri
 
 Ele exige a CLI configurada (`brew install oci-cli` + chave de API em
 `~/.oci/config`). Em vez de tentar lançar às cegas, consulta o relatório de
-capacidade a cada 30s e só chama o `launch` quando a shape aparece como
+capacidade a cada 45s e só chama o `launch` quando a shape aparece como
 `AVAILABLE` — bem mais provável de pegar a janela. Grava o andamento em
 `deploy/oracle-launch-retry.log`, o OCID e o IP em `deploy/.oracle-instance`, e
 avisa no WhatsApp quando sobe.
+
+Para esperar por dias sem depender do terminal aberto, instale como LaunchAgent:
+
+```bash
+cp deploy/com.luisazvedo.oracle-launch-retry.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.luisazvedo.oracle-launch-retry.plist
+launchctl bootout gui/$(id -u)/com.luisazvedo.oracle-launch-retry   # para parar
+```
+
+Dois detalhes do plist que não são decoração:
+
+- o job roda dentro de `caffeinate -s`, que segura o sono do sistema enquanto o
+  laço existe e **só na tomada**. Sem isso o MacBook dorme na bateria e o
+  processo congela junto: medido em 18/08, 3h42 de espera renderam ~25
+  sondagens, porque o Mac passou 3h dormindo.
+- `KeepAlive` só relança em saída diferente de zero, e o script sai com 0 em
+  todo fim previsto. Se ele parar sozinho, é porque decidiu parar — leia o log
+  antes de religar.
 
 Para consultar a capacidade na mão, sem tentar criar nada:
 

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.luisazvedo.oracle-launch-retry</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-l</string>
+    <string>-c</string>
+    <!-- caffeinate -s segura o sono do sistema SÓ enquanto o script roda e SÓ
+         na tomada (é o que o -s significa). Sem isso o MacBook dorme na
+         bateria, o laço congela e a vaga da A1 passa sem ninguém disputar:
+         medido em 18/08, 3h42 de espera renderam ~25 sondagens. -->
+    <string>exec /usr/bin/caffeinate -s /Users/luisazvedo/claude/agenda-whatsapp/deploy/oracle-launch-retry.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>SUPPRESS_LABEL_WARNING</key>
+    <string>True</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/luisazvedo/claude/agenda-whatsapp</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- O script sai com 0 quando a VM sobe: aí o job encerra de vez. Se morrer
+       por erro (rede caiu, Mac dormiu), o launchd levanta de novo. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/luisazvedo/claude/agenda-whatsapp/deploy/oracle-launch-retry.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/luisazvedo/claude/agenda-whatsapp/deploy/oracle-launch-retry.err</string>
+</dict>
+</plist>
