@@ -3,9 +3,11 @@
 #   deploy/sync.sh                  # só o código
 #   deploy/sync.sh --com-dados      # código + tarefas/followups/token do Google
 #
-# A sessão do WhatsApp (.wwebjs_auth) NUNCA é copiada: ela carrega o perfil do
-# Chromium do Mac (1 GB, binário de outra plataforma). No servidor se escaneia
-# um QR novo, e o WhatsApp passa a ter dois aparelhos conectados.
+# A sessão do WhatsApp (.baileys_auth) NUNCA é copiada. Não é questão de
+# tamanho: são credenciais de UM aparelho linkado, e o Baileys rotaciona as
+# chaves. Duas máquinas usando a mesma sessão derrubam uma à outra com
+# "Stream Errored (conflict)" e podem invalidar a sessão do Mac junto. No
+# servidor se escaneia um QR novo, e o WhatsApp passa a ter dois aparelhos.
 set -euo pipefail
 
 SERVIDOR="${SERVIDOR:-oracle-bot}"   # host definido no ~/.ssh/config
@@ -20,8 +22,8 @@ echo "==> Enviando código para ${SERVIDOR}:${DESTINO}"
 rsync -az --delete \
   --exclude '.git' \
   --exclude 'node_modules' \
-  --exclude '.wwebjs_auth' \
-  --exclude '.wwebjs_cache' \
+  --exclude '.baileys_auth' \
+  --exclude 'downtime.json' \
   --exclude 'qr.png' \
   --exclude 'agenda.log' \
   --exclude '.env' \

@@ -21,8 +21,15 @@ que só existem lá.
      começa a cobrar)
    - Boot volume: 50 GB
    - Adicione sua chave SSH pública (`~/.ssh/id_ed25519.pub`)
-3. Se aparecer "Out of host capacity", tente outro Availability Domain ou
-   repita mais tarde: a capacidade ARM some e volta.
+3. Se aparecer "Out of host capacity", tente os outros Availability Domains
+   (AD-1, AD-2, AD-3) antes de desistir: a capacidade ARM some e volta.
+   Persistindo, use o **plano B x86**, que quase sempre tem vaga: shape
+   `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB de RAM, também Always Free). Desde o
+   Baileys o bot inteiro são 38 MB de Node, então 1 GB sobra. O único ajuste é
+   no build do whisper: em 1 GB a compilação do whisper.cpp estoura a memória,
+   então suba o swap para 4 GB no `setup-servidor.sh` ou construa a imagem com
+   `--build-arg WHISPER_MODELO=base`. O Dockerfile já detecta a arquitetura
+   sozinho.
 
 Anote o IP público e crie a entrada no `~/.ssh/config` **do Mac**:
 
@@ -114,8 +121,11 @@ Só depois de confirmar que o servidor respondeu a uma mensagem de teste:
 pm2 stop agenda-whatsapp
 pm2 delete agenda-whatsapp
 pm2 save
-pkill -f wwebjs_auth        # mata Chromium órfão
 ```
+
+Desde o Baileys não há Chromium órfão para matar: o processo Node é tudo.
+A sessão do Mac (`.baileys_auth`) continua no lugar, então dá para voltar o bot
+para o Mac a qualquer momento sem escanear QR de novo.
 
 Para desfazer a migração, é o caminho inverso: `pm2 start` no Mac e
 `docker compose down` no servidor. Nunca deixe os dois rodando ao mesmo tempo:
@@ -151,13 +161,14 @@ As skills `/bot-agenda` e `/publicar-html` devem chamar `bin/bot` em vez de
 
 ## Detalhes que custam tempo se esquecidos
 
-- **Chromium**: em Linux ARM não existe build do Chrome for Testing. A imagem
-  usa o `chromium` do Debian e o caminho vai em `CHROME_PATH`, porque o
-  Puppeteer ignora `PUPPETEER_EXECUTABLE_PATH` nessa arquitetura.
-- **`shm_size: 1gb`** no compose: com o `/dev/shm` padrão de 64 MB o Chromium
-  morre sozinho depois de algumas horas.
+- **Sem navegador**: desde a migração para o Baileys não há Chromium na imagem.
+  As armadilhas antigas (build do Chrome for Testing inexistente em ARM,
+  `CHROME_PATH`, `shm_size: 1gb`) morreram junto e não valem mais.
 - **Transcrição de áudio**: o servidor usa o modelo `small` do whisper.cpp, não
   o `large-v3-turbo` do Mac. Para trocar, rebuild com
   `--build-arg WHISPER_MODELO=medium` e ajuste o `WHISPER_MODELO` do `.env`.
-- **Sessão do WhatsApp**: `.wwebjs_auth` nunca é sincronizado. São 1 GB de
-  perfil de Chromium do macOS, inútil no servidor.
+- **Sessão do WhatsApp**: `.baileys_auth` nunca é sincronizado, e o `sync.sh` a
+  exclui de propósito. Não é tamanho, é conflito: são credenciais de um
+  aparelho linkado e o Baileys rotaciona as chaves, então duas máquinas na
+  mesma sessão se derrubam com `Stream Errored (conflict)`. Cada máquina
+  escaneia o seu QR.

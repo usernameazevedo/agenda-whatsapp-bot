@@ -1,7 +1,7 @@
-# A sessão do WhatsApp tem 1 GB de perfil do Chromium do Mac e não serve no
-# servidor (escaneia-se um QR novo lá).
-.wwebjs_auth
-.wwebjs_cache
+# A sessão do WhatsApp são credenciais de um aparelho linkado, e o Baileys
+# rotaciona as chaves: ela nunca entra na imagem (escaneia-se um QR novo no
+# servidor) nem viaja entre máquinas.
+.baileys_auth
 node_modules
 .git
 agenda.log
