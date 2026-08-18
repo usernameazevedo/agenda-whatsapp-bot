@@ -29,7 +29,9 @@ IMAGEM="ocid1.image.oc1.sa-saopaulo-1.aaaaaaaav4hskmch2ikmva5wxqilujiwjsug7htb6k
 NOME="agenda-whatsapp"
 OCPUS="${OCPUS:-1}"
 MEMORIA="${MEMORIA:-6}"
-INTERVALO="${INTERVALO:-30}"
+# 45s é o equilíbrio medido: a 30s a consulta de capacidade esbarra no
+# TooManyRequests da API de vez em quando.
+INTERVALO="${INTERVALO:-45}"
 
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$RAIZ/deploy/oracle-launch-retry.log"
@@ -100,6 +102,13 @@ while true; do
   case "$status" in
     AVAILABLE)
       falhas_seguidas=0
+      ;;
+    ERRO*TooManyRequests*|ERRO*429*)
+      # Sondar de 30 em 30s às vezes bate no limite da API. Não é problema de
+      # conta e não conta como falha: é só recuar e voltar.
+      registrar "sondagem levou rate limit, recuando 5 min"
+      sleep 300
+      continue
       ;;
     ERRO*)
       falhas_seguidas=$((falhas_seguidas + 1))
