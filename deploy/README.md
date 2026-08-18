@@ -1,7 +1,8 @@
 # Migração para servidor (Oracle Cloud, São Paulo)
 
-Tira o bot do Mac e coloca numa VM ARM gratuita da Oracle. O que sai do Mac:
-o Chromium do WhatsApp Web (1,3 GB de RSS ligados 24h) e o processo Node.
+Tira o bot do Mac e coloca numa VM ARM gratuita da Oracle. Desde a migração
+para o Baileys não há navegador envolvido: o que sai do Mac é o processo Node
+(38 MB) e o whisper.cpp da transcrição de áudio.
 
 O que continua no Mac, sob demanda, via SSH: os comandos `claude:`, `ideia:`,
 `relatorio`, a verificação diária das 6h e o diagnóstico das automações. Eles
@@ -14,22 +15,55 @@ que só existem lá.
    não cobra). Escolha a **região São Paulo ou Vinhedo** no cadastro: a região
    não pode ser trocada depois, e o IP brasileiro evita que o WhatsApp estranhe
    a sessão.
-2. Compute → Instances → Create instance.
-   - Image: **Ubuntu 24.04**
-   - Shape: **VM.Standard.A1.Flex** (Ampere ARM), **2 OCPU / 12 GB**
-     (o Always Free foi reduzido de 4/24 para 2/12 em 15/06/2026; passar disso
-     começa a cobrar)
-   - Boot volume: 50 GB
+2. **Crie a rede antes da instância.** Se o wizard da instância criar a VCN, ele
+   desabilita o botão de IP público e a VM nasce inalcançável. Em Networking →
+   Virtual cloud networks → Actions → **Start VCN Wizard** → "Create VCN with
+   Internet Connectivity" (nome `vcn-bot`): sai VCN, subnet pública, internet
+   gateway, route table e security list de uma vez.
+3. Compute → Instances → Create instance.
+   - Image: **Canonical Ubuntu 24.04**, build `aarch64`
+   - Shape: **VM.Standard.A1.Flex** (Ampere ARM). 1 OCPU / 6 GB já sobra para o
+     bot, e A1.Flex é redimensionável depois sem recriar a VM. O Always Free vai
+     até 4 OCPU / 24 GB.
+   - Networking: a subnet **pública** da `vcn-bot`, com IP público automático
    - Adicione sua chave SSH pública (`~/.ssh/id_ed25519.pub`)
-3. Se aparecer "Out of host capacity", tente os outros Availability Domains
-   (AD-1, AD-2, AD-3) antes de desistir: a capacidade ARM some e volta.
-   Persistindo, use o **plano B x86**, que quase sempre tem vaga: shape
-   `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB de RAM, também Always Free). Desde o
-   Baileys o bot inteiro são 38 MB de Node, então 1 GB sobra. O único ajuste é
-   no build do whisper: em 1 GB a compilação do whisper.cpp estoura a memória,
-   então suba o swap para 4 GB no `setup-servidor.sh` ou construa a imagem com
-   `--build-arg WHISPER_MODELO=base`. O Dockerfile já detecta a arquitetura
-   sozinho.
+
+### "Out of host capacity"
+
+Em São Paulo existe **um único availability domain** (`SA-SAOPAULO-1-AD-1`), então
+não adianta procurar AD-2 ou AD-3: ou tem vaga, ou não tem. A shape A1 vive
+esgotada e o jeito é insistir — o console não serve para isso:
+
+```bash
+deploy/oracle-launch-retry.sh          # vigia a capacidade e lança quando abrir
+```
+
+Ele exige a CLI configurada (`brew install oci-cli` + chave de API em
+`~/.oci/config`). Em vez de tentar lançar às cegas, consulta o relatório de
+capacidade a cada 30s e só chama o `launch` quando a shape aparece como
+`AVAILABLE` — bem mais provável de pegar a janela. Grava o andamento em
+`deploy/oracle-launch-retry.log`, o OCID e o IP em `deploy/.oracle-instance`, e
+avisa no WhatsApp quando sobe.
+
+Para consultar a capacidade na mão, sem tentar criar nada:
+
+```bash
+oci compute compute-capacity-report create -c <tenancy-ocid> \
+  --availability-domain "lSaq:SA-SAOPAULO-1-AD-1" \
+  --shape-availabilities '[{"instanceShape":"VM.Standard.A1.Flex","instanceShapeConfig":{"ocpus":1.0,"memoryInGBs":6.0}}]'
+```
+
+**Plano B x86**: `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB, também Always Free).
+Não conte com ele de olhos fechados — em 17/08/2026 as duas shapes gratuitas
+estavam esgotadas em São Paulo ao mesmo tempo, enquanto as pagas (A2.Flex,
+E5.Flex) tinham vaga. Se pegar a E2.1.Micro: 1 GB sobra para o bot, mas a
+compilação do whisper.cpp estoura a memória, então suba o swap para 4 GB no
+`setup-servidor.sh` ou construa com `--build-arg WHISPER_MODELO=base`. O
+Dockerfile já detecta a arquitetura sozinho.
+
+Se a fila não andar de jeito nenhum, o desbloqueio conhecido é migrar a conta de
+Free Trial para **Pay As You Go**: a cota Always Free continua gratuita, e contas
+pagas têm prioridade na fila de capacidade ARM.
 
 Anote o IP público e crie a entrada no `~/.ssh/config` **do Mac**:
 

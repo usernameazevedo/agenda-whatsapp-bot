@@ -34,6 +34,8 @@ rsync -az --delete \
   --exclude 'token.json' \
   --exclude 'credentials.json' \
   --exclude 'MELHORIAS.md' \
+  --exclude 'deploy/oracle-launch-retry.log' \
+  --exclude 'deploy/.oracle-instance' \
   ./ "${SERVIDOR}:${DESTINO}/"
 
 if [ "$COM_DADOS" = "1" ]; then

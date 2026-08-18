@@ -19,3 +19,5 @@ qr.png
 RELATORIO.md
 tarefas.json
 MELHORIAS.md
+deploy/oracle-launch-retry.log
+deploy/.oracle-instance
