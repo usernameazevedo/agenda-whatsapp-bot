@@ -27,6 +27,11 @@ const PASTA_AUTH = path.join(RAIZ, '.baileys_auth');
 const MAX_RECONEXOES = 5;
 const ESPERA_RECONEXAO_MS = 5000;
 
+// Quantos ids de mensagem guardamos para reconhecer envios próprios e evitar
+// processar a mesma mensagem duas vezes. Não precisa ser grande: só cobre a
+// janela entre uma reconexão e a seguinte.
+const LIMITE_IDS = 500;
+
 // O Baileys espera um logger no formato do pino; não queremos o ruído dele no
 // log do bot, então entregamos um que descarta tudo.
 const loggerSilencioso = {
@@ -75,6 +80,23 @@ function desembrulhar(mensagem) {
   );
 }
 
+// Set com teto: ao encher, descarta o mais antigo (Set preserva a ordem de
+// inserção, então o primeiro valor é sempre o mais velho).
+function lembrar(conjunto, id) {
+  if (!id) return;
+  conjunto.add(id);
+  if (conjunto.size > LIMITE_IDS) conjunto.delete(conjunto.values().next().value);
+}
+
+// `messageTimestamp` chega em segundos e, dependendo do caminho no Baileys,
+// como número, string ou Long do protobuf. Sem hora legível devolvemos 0, que
+// faz a mensagem ser tratada como antiga — é o lado seguro do erro.
+function horaEmMs(mensagem) {
+  const t = mensagem?.messageTimestamp;
+  const segundos = Number(typeof t === 'object' && t !== null ? (t.low ?? t.toString()) : t);
+  return Number.isFinite(segundos) && segundos > 0 ? segundos * 1000 : 0;
+}
+
 export class WhatsApp {
   constructor() {
     this.sock = null;
@@ -89,6 +111,26 @@ export class WhatsApp {
     // dispara mais uma reconexão, e as conexões se multiplicam até o WhatsApp
     // derrubar todas com "Stream Errored (conflict)".
     this.geracao = 0;
+    // De quando em diante uma mensagem entregue pela fila offline conta como
+    // nova. Fixado UMA vez no boot: o index.js sobrescreve com o começo da
+    // parada registrada, antes de conectar. As reconexões internas não mexem
+    // nele de propósito — ele é um piso no passado, e qualquer mensagem de uma
+    // reconexão posterior é mais nova que esse piso.
+    this.marcoOffline = Date.now();
+    // Ids do que nós mesmos enviamos: o Baileys reemite cada envio como
+    // 'append' (emitOwnEvents), e no chat consigo mesmo a resposta do bot é
+    // indistinguível de um comando do dono — os dois são fromMe. O index.js já
+    // barra o próprio texto pelo prefixo MARCA_BOT; isto é a mesma defesa na
+    // camada de transporte, para ela não depender de um marcador de fora.
+    this.idsEnviados = new Set();
+    // Ids já entregues ao index.js: a mesma mensagem pode aparecer como
+    // 'notify' e voltar como 'append', e comando repetido cria tarefa dupla.
+    this.idsProcessados = new Set();
+  }
+
+  /** Define de quando em diante a fila offline conta como mensagem nova. */
+  definirMarcoOffline(ms) {
+    if (Number.isFinite(ms) && ms > 0) this.marcoOffline = ms;
   }
 
   // Encerra o socket atual e solta seus listeners antes de criar outro.
@@ -190,12 +232,30 @@ export class WhatsApp {
   }
 
   aoReceberMensagens({ messages, type }) {
-    // 'notify' = mensagem chegando agora. 'append' é sincronização de histórico,
-    // que reprocessaria comandos antigos a cada reconexão.
-    if (type !== 'notify') return;
+    // 'notify' = mensagem ao vivo.
+    //
+    // 'append' junta três coisas diferentes (baileys/lib/Socket/messages-recv.js
+    // usa `node.attrs.offline ? 'append' : 'notify'`):
+    //   a) sincronização de histórico — reprocessar reexecuta comando velho;
+    //   b) o que nós mesmos enviamos (messages-send.js, emitOwnEvents);
+    //   c) a FILA OFFLINE: o que chegou enquanto o bot estava fora.
+    //
+    // Descartar 'append' inteiro era simples, mas jogava fora (c) junto: todo
+    // comando enviado durante uma queda sumia em silêncio. Agora separamos os
+    // três — id próprio elimina (b), o marco da queda elimina (a).
+    if (type !== 'notify' && type !== 'append') return;
 
     for (const m of messages ?? []) {
       if (!m.message) continue; // notificação de protocolo, sem conteúdo
+      const id = m.key?.id;
+
+      if (type === 'append') {
+        if (id && this.idsEnviados.has(id)) continue;      // (b) resposta nossa
+        if (horaEmMs(m) < this.marcoOffline) continue;     // (a) histórico velho
+      }
+      if (id && this.idsProcessados.has(id)) continue;
+      lembrar(this.idsProcessados, id);
+
       const conteudo = desembrulhar(m.message);
       const audio = conteudo?.audioMessage ?? null;
 
@@ -223,7 +283,11 @@ export class WhatsApp {
 
   async sendMessage(chatId, texto) {
     if (!this.sock) throw new Error('WhatsApp ainda não inicializado');
-    await this.sock.sendMessage(normalizarId(chatId), { text: texto });
+    const enviada = await this.sock.sendMessage(normalizarId(chatId), { text: texto });
+    // O Baileys devolve o que enviamos pelo mesmo evento de entrada, marcado
+    // como 'append'. Guardar o id é o que impede o bot de tratar a própria
+    // resposta como um comando novo no chat consigo mesmo.
+    lembrar(this.idsEnviados, enviada?.key?.id);
   }
 
   /** Lista os grupos de que o número participa: [{ id, name }]. */

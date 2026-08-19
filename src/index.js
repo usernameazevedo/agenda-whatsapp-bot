@@ -188,17 +188,34 @@ let aguardandoQr = false; // sessão expirada: precisa de ação humana, reinici
 // registro de queda: persiste início e motivo para avisar no WhatsApp ao reconectar
 const DOWNTIME = new URL('../downtime.json', import.meta.url).pathname;
 
-function registrarQueda(motivo) {
+// `silencioso` marca parada pedida por nós (pm2, deploy): o marco continua
+// valendo para reprocessar a fila offline, mas não vira alarme no WhatsApp.
+// Uma queda de verdade nunca é silenciada por um reinício posterior.
+function registrarQueda(motivo, { silencioso = false } = {}) {
   try {
     let reg = null;
     try { reg = JSON.parse(fs.readFileSync(DOWNTIME, 'utf8')); } catch { /* primeira queda */ }
     const agora = new Date().toISOString();
     reg = reg?.inicio
-      ? { ...reg, motivo, reinicios: (reg.reinicios ?? 0) + 1 }
-      : { inicio: agora, motivo, reinicios: 1 };
+      ? { ...reg, motivo, reinicios: (reg.reinicios ?? 0) + 1, silencioso: Boolean(reg.silencioso) && silencioso }
+      : { inicio: agora, motivo, reinicios: 1, silencioso };
     fs.writeFileSync(DOWNTIME, JSON.stringify(reg, null, 1));
   } catch (err) {
     console.error('Falha ao registrar queda:', err.message);
+  }
+}
+
+// Ao reconectar, o WhatsApp entrega o que chegou durante a queda. Essas
+// mensagens vêm marcadas como 'append', igual ao histórico antigo, e só o
+// horário separa uma coisa da outra — daí o início da queda virar o corte.
+// Lido antes de conectar porque avisarRecuperacao() apaga o arquivo.
+function marcoDaUltimaQueda() {
+  try {
+    const reg = JSON.parse(fs.readFileSync(DOWNTIME, 'utf8'));
+    const ms = new Date(reg?.inicio).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  } catch {
+    return null; // sem queda registrada: o padrão do socket já serve
   }
 }
 
@@ -207,13 +224,17 @@ async function avisarRecuperacao() {
   try { reg = JSON.parse(fs.readFileSync(DOWNTIME, 'utf8')); } catch { return; }
   try { fs.unlinkSync(DOWNTIME); } catch {}
   if (!reg?.inicio) return;
+  // Parada que nós mesmos pedimos: o marco já foi aproveitado antes de conectar
+  // para recuperar a fila offline, e avisar "ficou fora do ar" a cada deploy
+  // seria só ruído.
+  if (reg.silencioso) return;
   const fmt = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: CONFIG.timezone, hour12: false });
   const minutos = Math.max(1, Math.round((Date.now() - new Date(reg.inicio).getTime()) / 60000));
   const texto =
     `⚠️ *Bot ficou fora do ar* por ~${minutos} min\n` +
     `De ${fmt(reg.inicio)} até ${fmt(new Date().toISOString())}\n` +
     `Motivo: ${reg.motivo}${reg.reinicios > 1 ? ` (${reg.reinicios} reinícios até recuperar)` : ''}\n\n` +
-    `Mensagens recebidas nesse período NÃO foram processadas — reenvie pedidos feitos nesse intervalo.`;
+    `O que o WhatsApp guardou na fila foi processado agora. Se algum pedido desse intervalo ficou sem resposta, reenvie.`;
   try {
     await enviarMensagem(texto);
   } catch (err) {
@@ -510,6 +531,10 @@ async function main() {
     reiniciarLimpo(`WhatsApp desconectou (${reason})`);
   });
 
+  // Antes de abrir o socket: se houve queda, a fila offline vale a partir dela.
+  const marco = marcoDaUltimaQueda();
+  if (marco) whatsapp.definirMarcoOffline(marco);
+
   await whatsapp.initialize();
 }
 
@@ -517,6 +542,11 @@ async function main() {
 for (const sinal of ['SIGINT', 'SIGTERM']) {
   process.on(sinal, async () => {
     console.log(`Recebido ${sinal}, encerrando...`);
+    // Registra a parada ANTES de sair: é esse marco que, no próximo boot, faz
+    // a fila offline do WhatsApp ser reprocessada a partir daqui. Sem ele, todo
+    // `pm2 restart` (que manda SIGINT) engole em silêncio o que chegou durante
+    // o reinício — que é o caminho de reinício mais comum deste bot.
+    registrarQueda(`reinício solicitado (${sinal})`, { silencioso: true });
     try {
       await whatsapp.destroy();
     } catch {}
