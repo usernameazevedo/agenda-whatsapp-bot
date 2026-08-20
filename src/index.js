@@ -14,6 +14,7 @@ import { interceptarBridge, gerarBriefing } from './claude-bridge.js';
 import { diagnosticarAutomacoes } from './diagnostico.js';
 import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
+import { horarioDoCron, agoraLocal, ficouParaTras, lerExecucoes, umaVezPorDia } from './jobs.js';
 import { t } from './i18n.js';
 
 const whatsapp = new WhatsApp();
@@ -125,6 +126,23 @@ async function comSaude(fn) {
     registrarSucessoGoogle();
   } catch (err) {
     registrarErroGoogle(err);
+  }
+}
+
+// Jobs de horário fixo já registrados, para recuperar o que a máquina dormiu
+// por cima. Preenchido uma vez, no primeiro "ready".
+const jobsRecuperaveis = [];
+
+// Roda o que ficou para trás. Chamado a cada reconexão porque, na prática,
+// toda soneca da máquina derruba o socket do WhatsApp: reconectar é o sinal
+// disponível de que a máquina acordou.
+async function recuperarJobsAtrasados() {
+  const agora = agoraLocal(CONFIG.timezone);
+  const marcas = lerExecucoes();
+  for (const job of jobsRecuperaveis) {
+    if (!ficouParaTras(job.expr, marcas[job.nome], agora)) continue;
+    console.log(`[cron] "${job.nome}" (${job.expr}) ficou para trás — executando atrasado.`);
+    await comSaude(() => umaVezPorDia(job.nome, hojeStr(), job.fn));
   }
 }
 
@@ -357,7 +375,12 @@ async function main() {
     await resolverGrupo();
     await avisarRecuperacao();
 
-    if (jaConfigurado) return;
+    if (jaConfigurado) {
+      // Reconexão. Como toda soneca da máquina derruba o socket, voltar a
+      // conectar é o momento de consertar um horário perdido durante o sono.
+      await recuperarJobsAtrasados();
+      return;
+    }
     jaConfigurado = true;
 
     const modoTeste = process.argv.indexOf('--now');
@@ -388,14 +411,26 @@ async function main() {
         console.warn(`[cron] "${nome}" desativado: expressão ausente ou inválida (${expr ?? 'undefined'}) — defina no src/config.js`);
         return;
       }
-      cron.schedule(expr, fn, opts);
+      // Horário fixo ("M H * * D") roda no máximo uma vez por dia e deixa
+      // marca em disco — é a marca que permite recuperá-lo se a máquina dormiu
+      // por cima do horário.
+      // Job de frequência (lembretes, recorrentes) fica de fora de propósito:
+      // recuperar uma noite dormida despejaria centenas de execuções.
+      if (horarioDoCron(expr)) {
+        jobsRecuperaveis.push({ nome, expr, fn });
+        cron.schedule(expr, () => comSaude(() => umaVezPorDia(nome, hojeStr(), fn)), opts);
+        return;
+      }
+      cron.schedule(expr, () => comSaude(fn), opts);
     };
-    agendar('diario', CONFIG.cronDiario, '0 7 * * *', () => comSaude(() => executarDiario(auth)));
-    agendar('semanal', CONFIG.cronSemanal, '0 7 * * 1', () => comSaude(() => executarSemanal(auth)));
-    agendar('noturno', CONFIG.cronNoturno, '0 21 * * *', () => comSaude(() => executarNoturno(auth)));
-    agendar('lembretes', '* * * * *', null, () => comSaude(() => verificarLembretes(auth, enviarMensagem)));
+    // `agendar` já envolve tudo em comSaude — e, nos horários fixos, na marca
+    // de uma vez por dia. Por isso os jobs abaixo passam a função crua.
+    agendar('diario', CONFIG.cronDiario, '0 7 * * *', () => executarDiario(auth));
+    agendar('semanal', CONFIG.cronSemanal, '0 7 * * 1', () => executarSemanal(auth));
+    agendar('noturno', CONFIG.cronNoturno, '0 21 * * *', () => executarNoturno(auth));
+    agendar('lembretes', '* * * * *', null, () => verificarLembretes(auth, enviarMensagem));
     // briefing matinal inteligente (Claude analisa agenda + tarefas + followups)
-    agendar('briefing', '10 7 * * 1-6', null, () => comSaude(async () => {
+    agendar('briefing', '10 7 * * 1-6', null, async () => {
       const hoje = inicioDoDia(new Date());
       const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
       const contexto = [
@@ -406,24 +441,26 @@ async function main() {
       ].join('\n\n');
       const briefing = await gerarBriefing(contexto);
       if (briefing) await enviarMensagem(briefing);
-    }));
+    });
     // verificação diária das 6h: saúde do app + uma melhoria por dia (MELHORIAS.md)
-    agendar('verificacao', '0 6 * * *', null, () => comSaude(async () => {
+    agendar('verificacao', '0 6 * * *', null, async () => {
       const msg = await verificacaoDiaria();
       if (msg) await enviarMensagem(msg);
-    }));
+    });
     // diagnóstico diário das automações do Mac (só avisa se algo quebrou)
-    agendar('diagnostico', '0 8 * * *', null, () => comSaude(async () => {
+    agendar('diagnostico', '0 8 * * *', null, async () => {
       const alerta = await diagnosticarAutomacoes();
       if (alerta) await enviarMensagem(alerta);
-    }));
+    });
     // lembretes recorrentes insistentes: verifica no início de cada hora
-    agendar('recorrentes', '0 * * * *', null, () => comSaude(async () => {
+    agendar('recorrentes', '0 * * * *', null, async () => {
       const hora = horaAgora();
       for (const msg of lembretesParaAgora(hora)) await enviarMensagem(msg);
-    }));
+    });
 
     console.log(`Agendado: diário (${CONFIG.cronDiario}), semanal (${CONFIG.cronSemanal}), noturno (${CONFIG.cronNoturno}), lembretes ${CONFIG.lembreteMinutos.join('/')}min antes — ${CONFIG.timezone}`);
+    console.log(`Recuperáveis se a máquina dormir por cima do horário: ${jobsRecuperaveis.map((j) => j.nome).join(', ')}`);
+    await recuperarJobsAtrasados();
 
     // Números autorizados a comandar o bot, comparados só pelos dígitos: o
     // WhatsApp usa @s.whatsapp.net, @lid e @c.us para o mesmo contato.
