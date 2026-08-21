@@ -14,6 +14,11 @@ followups.json
 recorrentes.json
 agenda.log
 qr.png
+# Marcas de estado, sempre da máquina onde o bot roda: qual job já rodou hoje
+# e desde quando ele está fora do ar. Versionar (ou copiar entre máquinas)
+# faria o bot de uma máquina pular o dia por causa da marca da outra.
+execucoes.json
+downtime.json
 
 # documentos pessoais
 RELATORIO.md

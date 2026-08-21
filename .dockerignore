@@ -17,3 +17,7 @@ followups.json
 outbox.json
 recorrentes.json
 MELHORIAS.md
+# Marcas de estado da máquina de origem. Assadas na imagem, fariam o
+# container nascer achando que os jobs de hoje já rodaram.
+execucoes.json
+downtime.json
