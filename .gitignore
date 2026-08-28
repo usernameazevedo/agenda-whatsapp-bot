@@ -29,3 +29,4 @@ deploy/.oracle-instance
 deploy/oracle-launch-retry.out
 deploy/oracle-launch-retry.err
 my-repo.json
+outbox.json

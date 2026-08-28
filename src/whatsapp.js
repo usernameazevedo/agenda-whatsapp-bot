@@ -297,7 +297,10 @@ export class WhatsApp {
    */
   async reagir(chave, emoji) {
     if (!this.sock || !chave) return;
-    await this.sock.sendMessage(chave.remoteJid, { react: { text: emoji, key: chave } });
+    const enviada = await this.sock.sendMessage(chave.remoteJid, { react: { text: emoji, key: chave } });
+    // mesmo cuidado do sendMessage: o Baileys devolve o que enviamos como
+    // 'append', e sem o id guardado a reação volta pelo caminho de entrada
+    lembrar(this.idsEnviados, enviada?.key?.id);
   }
 
   /** Lista os grupos de que o número participa: [{ id, name }]. */

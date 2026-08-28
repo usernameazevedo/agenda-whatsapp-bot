@@ -12,16 +12,33 @@ const ARQUIVO = path.resolve('my-repo.json');
 const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
 const LIXO_FINAL = /[.,;:!?)\]}>'"]+$/;
 
+// Arquivo ausente é fila vazia; arquivo ILEGÍVEL é erro que precisa estourar.
+// Tratar os dois como [] faria a gravação seguinte sobrescrever a fila inteira
+// com o link que acabou de chegar — perda silenciosa de tudo que estava lá.
 function carregar() {
+  let bruto;
   try {
-    return JSON.parse(fs.readFileSync(ARQUIVO, 'utf8'));
-  } catch {
-    return [];
+    bruto = fs.readFileSync(ARQUIVO, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  try {
+    const lista = JSON.parse(bruto);
+    if (!Array.isArray(lista)) throw new Error('conteúdo não é uma lista');
+    return lista;
+  } catch (err) {
+    throw new Error(`${ARQUIVO} ilegível (${err.message}) — conserte ou renomeie o arquivo antes de continuar`);
   }
 }
 
+// Escrita atômica: grava num temporário e renomeia. O rename é atômico no
+// mesmo sistema de arquivos, então nem um crash no meio da escrita nem o CLI
+// rodando junto com o bot deixam para trás um JSON pela metade.
 function salvar(lista) {
-  fs.writeFileSync(ARQUIVO, JSON.stringify(lista, null, 2));
+  const tmp = `${ARQUIVO}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(lista, null, 2));
+  fs.renameSync(tmp, ARQUIVO);
 }
 
 /** Classificação grosseira só para orientar quem for analisar depois. */

@@ -65,6 +65,22 @@ ok(marcarLink('https://naoexiste.com') === null, 'chave inexistente devolve null
 const emDisco = JSON.parse(fs.readFileSync(path.join(tmp, 'my-repo.json'), 'utf8'));
 ok(emDisco.length === 3, 'my-repo.json tem os 3 itens em disco');
 
+// 7. arquivo corrompido não pode virar fila vazia: zerar em silêncio apagaria
+// todo o histórico na próxima gravação
+const arquivo = path.join(tmp, 'my-repo.json');
+const intacto = fs.readFileSync(arquivo, 'utf8');
+fs.writeFileSync(arquivo, '[{"url": "https://truncado.com"');
+let estourou = false;
+try {
+  capturarLinks('https://novo.com');
+} catch {
+  estourou = true;
+}
+ok(estourou, 'JSON corrompido estoura em vez de zerar a fila');
+ok(fs.readFileSync(arquivo, 'utf8').startsWith('[{"url": "https://truncado.com"'), 'arquivo corrompido não foi sobrescrito');
+fs.writeFileSync(arquivo, intacto);
+ok(listarLinks('todos').length === 3, 'fila volta ao normal com o arquivo restaurado');
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(falhas === 0 ? '\nTodos os casos passaram.' : `\n${falhas} caso(s) falharam.`);
 process.exit(falhas === 0 ? 0 : 1);

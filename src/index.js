@@ -510,11 +510,22 @@ async function main() {
         // Caixa de entrada de links: o grupo é só depósito. Guarda o que tem
         // link, reage confirmando e sai — nada ali vira comando do bot, e a
         // análise só acontece quando for pedida numa sessão do Claude.
+        // O mesmo gate de autor do resto do handler vale aqui: gravar em disco
+        // o que um terceiro postou no grupo seria a única superfície do bot que
+        // aceita dado de quem não é o dono.
         if (grupoLinksId && chatId === grupoLinksId) {
+          if (!msg.fromMe && !numerosAutorizados.has(numeroDe(msg.autorId))) {
+            console.log(`[my.repo] link de terceiro ignorado (autor=${msg.autorId})`);
+            return;
+          }
           const novos = capturarLinks(msg.body, { autor: msg.nome });
           if (novos.length > 0) {
             console.log(`[my.repo] ${novos.length} link(s) guardado(s): ${novos.map((l) => l.url).join(', ')}`);
-            if (!DRY_RUN) await whatsapp.reagir(msg.chave, '📥').catch(() => {});
+            if (!DRY_RUN) {
+              await whatsapp
+                .reagir(msg.chave, '📥')
+                .catch((err) => console.error('[my.repo] falha ao reagir:', err.message));
+            }
           }
           return;
         }
