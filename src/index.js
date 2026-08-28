@@ -112,25 +112,27 @@ async function resolverGrupo() {
 // Caixa de entrada de links. Resolvido junto do grupo principal, mas com falha
 // silenciosa: sem esse grupo o bot segue normal, só não coleta link nenhum.
 async function resolverGrupoLinks() {
+  if (!CONFIG.grupoLinks && !CONFIG.grupoLinksId) return;
+  try {
+    if (CONFIG.grupoLinks) {
+      const alvo = nomeNormalizado(CONFIG.grupoLinks);
+      const g = (await listarGrupos()).find(
+        (c) => c.name === CONFIG.grupoLinks || nomeNormalizado(c.name) === alvo,
+      );
+      if (g) {
+        grupoLinksId = g.id;
+        console.log(`Links do grupo "${CONFIG.grupoLinks}" (${grupoLinksId}) serão guardados em my-repo.json.`);
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('Falha ao resolver grupo de links por nome:', err.message);
+  }
   if (CONFIG.grupoLinksId) {
     grupoLinksId = CONFIG.grupoLinksId;
     console.log(`Links do grupo (ID fixo ${grupoLinksId}) serão guardados em my-repo.json.`);
-    return;
-  }
-  if (!CONFIG.grupoLinks) return;
-  try {
-    const alvo = nomeNormalizado(CONFIG.grupoLinks);
-    const g = (await listarGrupos()).find(
-      (c) => c.name === CONFIG.grupoLinks || nomeNormalizado(c.name) === alvo,
-    );
-    if (g) {
-      grupoLinksId = g.id;
-      console.log(`Links do grupo "${CONFIG.grupoLinks}" (${grupoLinksId}) serão guardados em my-repo.json.`);
-    } else {
-      console.warn(`Grupo de links "${CONFIG.grupoLinks}" não encontrado — coleta desligada.`);
-    }
-  } catch (err) {
-    console.error('Falha ao resolver grupo de links:', err.message);
+  } else {
+    console.warn(`Grupo de links "${CONFIG.grupoLinks}" não encontrado — coleta desligada.`);
   }
 }
 
