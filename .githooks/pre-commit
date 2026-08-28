@@ -1,0 +1,62 @@
+#!/bin/sh
+# Trava de vazamento. Existe porque em 28/08/2026 o outbox.json foi commitado
+# com a lista de tarefas real (nomes de cliente, cartão) e ficou público no
+# GitHub até alguém reparar — o histórico teve que ser reescrito.
+#
+# Ativar (uma vez por clone):  git config core.hooksPath .githooks
+# Pular de propósito:          git commit --no-verify
+#
+# Bloqueia duas coisas no que está EM STAGE:
+#   1. JSON na raiz do projeto — aqui isso é sempre estado de runtime, nunca
+#      código. Se um novo aparecer, o lugar dele é o .gitignore.
+#   2. Identificadores pessoais no conteúdo: telefone brasileiro com DDI,
+#      chat do WhatsApp (@g.us / @lid) e o e-mail pessoal fora dos READMEs
+#      (onde ele é bloco de contato proposital).
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+erros=""
+
+# 1. JSON solto na raiz
+for arquivo in $staged; do
+  case "$arquivo" in
+    */*) continue ;;          # está em subpasta, tudo bem
+    *.json)
+      case "$arquivo" in
+        package.json|package-lock.json) continue ;;
+        *) erros="${erros}\n  ✗ ${arquivo}: JSON na raiz é estado de runtime — ponha no .gitignore" ;;
+      esac
+      ;;
+  esac
+done
+
+# 2. dado pessoal no conteúdo
+for arquivo in $staged; do
+  [ -f "$arquivo" ] || continue
+  conteudo=$(git show ":$arquivo" 2>/dev/null) || continue
+
+  if printf '%s' "$conteudo" | grep -qE '55[0-9]{2}9?[0-9]{8}'; then
+    erros="${erros}\n  ✗ ${arquivo}: número de telefone com DDI"
+  fi
+  if printf '%s' "$conteudo" | grep -qE '[0-9]{10,}@(g\.us|lid|c\.us|s\.whatsapp\.net)'; then
+    erros="${erros}\n  ✗ ${arquivo}: identificador de chat/grupo do WhatsApp"
+  fi
+  case "$arquivo" in
+    README*.md) ;;            # o e-mail de contato mora ali de propósito
+    *)
+      if printf '%s' "$conteudo" | grep -qiE '[a-z0-9._%+-]+@gmail\.com'; then
+        erros="${erros}\n  ✗ ${arquivo}: e-mail pessoal"
+      fi
+      ;;
+  esac
+done
+
+if [ -n "$erros" ]; then
+  printf '\n🚫 commit barrado — este repositório é PÚBLICO:\n'
+  printf "$erros\n"
+  printf '\nConserte, ou use "git commit --no-verify" se for mesmo intencional.\n\n'
+  exit 1
+fi
+
+exit 0
