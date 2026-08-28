@@ -1,5 +1,9 @@
+import { silenciarLibsignal } from './silenciar-libsignal.js';
 import cron from 'node-cron';
 import qrcode from 'qrcode-terminal';
+
+// antes de qualquer coisa: o libsignal despeja chave privada no console
+silenciarLibsignal();
 import { WhatsApp, normalizarId, numeroDe, ehGrupo } from './whatsapp.js';
 import { CONFIG } from './config.js';
 import { getAuthClient, listarEventos } from './calendar.js';
