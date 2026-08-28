@@ -261,6 +261,7 @@ export class WhatsApp {
 
       this.emitir('message', {
         chatId: m.key.remoteJid,
+        chave: m.key, // identifica a mensagem para reagir a ela
         fromMe: Boolean(m.key.fromMe),
         // Em grupo, participant identifica quem falou; fora dele é o próprio
         // chat. Atenção ao `||`: em conversas diretas por @lid o Baileys manda
@@ -288,6 +289,15 @@ export class WhatsApp {
     // como 'append'. Guardar o id é o que impede o bot de tratar a própria
     // resposta como um comando novo no chat consigo mesmo.
     lembrar(this.idsEnviados, enviada?.key?.id);
+  }
+
+  /**
+   * Reage a uma mensagem (emoji vazio remove a reação). Serve para confirmar
+   * recebimento sem escrever no chat — falha não deve derrubar o handler.
+   */
+  async reagir(chave, emoji) {
+    if (!this.sock || !chave) return;
+    await this.sock.sendMessage(chave.remoteJid, { react: { text: emoji, key: chave } });
   }
 
   /** Lista os grupos de que o número participa: [{ id, name }]. */

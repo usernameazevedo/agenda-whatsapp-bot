@@ -15,6 +15,7 @@ import { diagnosticarAutomacoes } from './diagnostico.js';
 import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { horarioDoCron, agoraLocal, ficouParaTras, lerExecucoes, umaVezPorDia } from './jobs.js';
+import { capturarLinks } from './myrepo.js';
 import { t } from './i18n.js';
 
 const whatsapp = new WhatsApp();
@@ -68,6 +69,8 @@ async function enviarPara(chatId, texto) {
 
 // id do grupo de destino (resolvido no ready); null = conversa consigo mesmo
 let grupoId = null;
+// id do grupo caixa-de-entrada de links (my.repo); null = recurso desligado
+let grupoLinksId = null;
 
 // compara nomes de grupo ignorando espaços, emoji, acentos e maiúsculas
 const nomeNormalizado = (s) =>
@@ -103,6 +106,31 @@ async function resolverGrupo() {
     console.log(`Mensagens do bot irão para o grupo pelo ID fixo (${grupoId}).`);
   } else {
     console.warn(`Grupo "${CONFIG.grupo}" não encontrado — usando a conversa própria.`);
+  }
+}
+
+// Caixa de entrada de links. Resolvido junto do grupo principal, mas com falha
+// silenciosa: sem esse grupo o bot segue normal, só não coleta link nenhum.
+async function resolverGrupoLinks() {
+  if (CONFIG.grupoLinksId) {
+    grupoLinksId = CONFIG.grupoLinksId;
+    console.log(`Links do grupo (ID fixo ${grupoLinksId}) serão guardados em my-repo.json.`);
+    return;
+  }
+  if (!CONFIG.grupoLinks) return;
+  try {
+    const alvo = nomeNormalizado(CONFIG.grupoLinks);
+    const g = (await listarGrupos()).find(
+      (c) => c.name === CONFIG.grupoLinks || nomeNormalizado(c.name) === alvo,
+    );
+    if (g) {
+      grupoLinksId = g.id;
+      console.log(`Links do grupo "${CONFIG.grupoLinks}" (${grupoLinksId}) serão guardados em my-repo.json.`);
+    } else {
+      console.warn(`Grupo de links "${CONFIG.grupoLinks}" não encontrado — coleta desligada.`);
+    }
+  } catch (err) {
+    console.error('Falha ao resolver grupo de links:', err.message);
   }
 }
 
@@ -373,6 +401,7 @@ async function main() {
     falhasSeguidas = 0;
     console.log('WhatsApp conectado.');
     await resolverGrupo();
+    await resolverGrupoLinks();
     await avisarRecuperacao();
 
     if (jaConfigurado) {
@@ -475,6 +504,19 @@ async function main() {
       try {
         const chatId = msg.chatId;
         if (!chatId || chatId === 'status@broadcast') return; // Status de contatos
+
+        // Caixa de entrada de links: o grupo é só depósito. Guarda o que tem
+        // link, reage confirmando e sai — nada ali vira comando do bot, e a
+        // análise só acontece quando for pedida numa sessão do Claude.
+        if (grupoLinksId && chatId === grupoLinksId) {
+          const novos = capturarLinks(msg.body, { autor: msg.nome });
+          if (novos.length > 0) {
+            console.log(`[my.repo] ${novos.length} link(s) guardado(s): ${novos.map((l) => l.url).join(', ')}`);
+            if (!DRY_RUN) await whatsapp.reagir(msg.chave, '📥').catch(() => {});
+          }
+          return;
+        }
+
         const isGroup = ehGrupo(chatId);
         const isAudio = audioDisponivel && msg.isAudio;
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;

@@ -25,6 +25,12 @@ export const CONFIG = {
   // nome. Deixe null para usar a conversa consigo mesmo.
   grupo: process.env.WHATSAPP_GRUPO ?? null,
 
+  // Grupo "caixa de entrada de links": todo link postado lá vira fila em
+  // my-repo.json, para ser analisado depois (`node bin/links.js`). O bot só
+  // guarda e reage com 📥 — não responde nem interpreta comandos ali.
+  grupoLinks: process.env.WHATSAPP_GRUPO_LINKS ?? null,
+  grupoLinksId: process.env.WHATSAPP_GRUPO_LINKS_ID ?? null,
+
   // IDs extras de chat autorizados (formato novo @lid do WhatsApp).
   // Deixe vazio; se suas mensagens forem ignoradas, o log mostra o ID a adicionar.
   chatsExtras: [],
