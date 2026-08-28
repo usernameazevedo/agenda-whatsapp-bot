@@ -45,8 +45,34 @@ function salvar(lista) {
 function tipoDe(url) {
   const u = url.toLowerCase();
   if (/(github\.com|gitlab\.com|bitbucket\.org|huggingface\.co)/.test(u)) return 'repo';
-  if (/(youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/(reel|p)|vimeo\.com|x\.com\/\w+\/status)/.test(u)) return 'video';
+  // post do X não é vídeo por padrão; o resto da lista é sempre player
+  if (/(youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/(reel|p)|vimeo\.com)/.test(u)) return 'video';
   return 'site';
+}
+
+// Parâmetros que as próprias redes grudam ao compartilhar. Sem tirá-los, o
+// mesmo link colado do WhatsApp e do navegador vira duas entradas na fila.
+// `t` (momento do vídeo) fica: é conteúdo, não rastreio.
+const PARAM_RASTREIO = /^(utm_.*|fbclid|gclid|igshid|mibextid|si|ref_src|ref_url|s|share_id)$/i;
+
+/**
+ * Forma canônica usada só para COMPARAR links. A URL original é sempre a
+ * guardada — é ela que vai ser aberta depois, com os parâmetros que vieram.
+ */
+export function chaveDe(url) {
+  try {
+    const u = new URL(url);
+    u.protocol = 'https:';
+    u.hash = '';
+    u.hostname = u.hostname.replace(/^www\./i, '').toLowerCase();
+    for (const p of [...u.searchParams.keys()]) {
+      if (PARAM_RASTREIO.test(p)) u.searchParams.delete(p);
+    }
+    u.pathname = u.pathname.replace(/\/+$/, '');
+    return u.toString();
+  } catch {
+    return url; // não é URL parseável: compara como texto mesmo
+  }
 }
 
 /** URLs distintas de um texto, na ordem em que aparecem. */
@@ -65,12 +91,17 @@ export function capturarLinks(texto, meta = {}) {
   if (urls.length === 0) return [];
 
   const lista = carregar();
-  const jaTem = new Set(lista.map((x) => x.url));
+  const jaTem = new Set(lista.map((x) => chaveDe(x.url)));
   // a mensagem sem as URLs é o comentário do dono ("isso aqui pro pipeline")
   const nota = (texto ?? '').replace(URL_RE, ' ').replace(/\s+/g, ' ').trim();
 
   const novos = urls
-    .filter((url) => !jaTem.has(url))
+    .filter((url) => {
+      const chave = chaveDe(url);
+      if (jaTem.has(chave)) return false;
+      jaTem.add(chave); // duas variantes do mesmo link na MESMA mensagem
+      return true;
+    })
     .map((url) => ({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
       url,
@@ -99,7 +130,9 @@ export function listarLinks(status = 'novo') {
 export function marcarLink(chave, status = 'analisado') {
   const lista = carregar();
   const porPosicao = /^\d+$/.test(String(chave)) ? listarLinks('novo')[Number(chave) - 1] : null;
-  const alvo = lista.find((x) => x.id === chave || x.url === chave || x.id === porPosicao?.id);
+  const alvo = lista.find(
+    (x) => x.id === chave || x.url === chave || chaveDe(x.url) === chaveDe(chave) || x.id === porPosicao?.id,
+  );
   if (!alvo) return null;
 
   const atualizado = {

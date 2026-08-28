@@ -15,7 +15,7 @@ import { diagnosticarAutomacoes } from './diagnostico.js';
 import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { horarioDoCron, agoraLocal, ficouParaTras, lerExecucoes, umaVezPorDia } from './jobs.js';
-import { capturarLinks } from './myrepo.js';
+import { capturarLinks, extrairLinks, listarLinks } from './myrepo.js';
 import { t } from './i18n.js';
 
 const whatsapp = new WhatsApp();
@@ -197,6 +197,14 @@ async function executarDiario(auth) {
   const eventos = await listarEventos(auth, hoje, inicioDoDia(new Date(), 1));
   let msg = resumoDiario(eventos, hoje, t('daily.title.morning'), formatarTarefas());
   if (movidas > 0) msg += `\n${t('task.postponed.auto', { n: movidas })}`;
+  // fila do my.repo: sem esta linha só se descobre que há link parado abrindo
+  // uma sessão do Claude. Falha de leitura não pode derrubar o resumo do dia.
+  try {
+    const naFila = listarLinks('novo').length;
+    if (naFila > 0) msg += `\n${t('myrepo.queue', { n: naFila })}`;
+  } catch (err) {
+    console.error('[my.repo] falha ao contar a fila:', err.message);
+  }
   await enviarMensagem(msg);
   await enviarSecretaria(msg); // secretária recebe o resumo do dia automaticamente
 }
@@ -518,14 +526,28 @@ async function main() {
             console.log(`[my.repo] link de terceiro ignorado (autor=${msg.autorId})`);
             return;
           }
-          const novos = capturarLinks(msg.body, { autor: msg.nome });
-          if (novos.length > 0) {
-            console.log(`[my.repo] ${novos.length} link(s) guardado(s): ${novos.map((l) => l.url).join(', ')}`);
+          const achados = extrairLinks(msg.body);
+          if (achados.length === 0) return; // conversa solta no grupo, sem link
+          try {
+            const novos = capturarLinks(msg.body, { autor: msg.nome });
+            // ♻️ em vez de silêncio: sem sinal nenhum não dá para saber se o
+            // link já estava na fila ou se o bot está fora do ar.
+            const reacao = novos.length > 0 ? '📥' : '♻️';
+            console.log(
+              novos.length > 0
+                ? `[my.repo] ${novos.length} link(s) guardado(s): ${novos.map((l) => l.url).join(', ')}`
+                : `[my.repo] link(s) já na fila, ignorado(s): ${achados.join(', ')}`,
+            );
             if (!DRY_RUN) {
               await whatsapp
-                .reagir(msg.chave, '📥')
+                .reagir(msg.chave, reacao)
                 .catch((err) => console.error('[my.repo] falha ao reagir:', err.message));
             }
+          } catch (err) {
+            // O grupo de links é depósito: erro dele é avisado no grupo do bot,
+            // que é onde as falhas já moram, em vez de sujar a caixa de entrada.
+            console.error('[my.repo] falha ao guardar link:', err.message);
+            await enviarMensagem(`⚠️ Não consegui guardar o link do my.repo: ${err.message}`).catch(() => {});
           }
           return;
         }
