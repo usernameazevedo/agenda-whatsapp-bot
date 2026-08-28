@@ -84,6 +84,9 @@ cd agenda-whatsapp-bot
 npm install
 cp src/config.example.js src/config.js
 # edit src/config.js with your number
+
+# optional, recommended: block personal data from being committed
+git config core.hooksPath .githooks
 ```
 
 ### 2. Google Calendar credentials

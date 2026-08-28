@@ -82,6 +82,9 @@ cd agenda-whatsapp-bot
 npm install
 cp src/config.example.js src/config.js
 # edite src/config.js com seu número
+
+# opcional, recomendado: barra dado pessoal antes de virar commit
+git config core.hooksPath .githooks
 ```
 
 ### 2. Credenciais do Google Calendar
