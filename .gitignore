@@ -28,3 +28,4 @@ deploy/oracle-launch-retry.log
 deploy/.oracle-instance
 deploy/oracle-launch-retry.out
 deploy/oracle-launch-retry.err
+my-repo.json
