@@ -292,6 +292,25 @@ export class WhatsApp {
   }
 
   /**
+   * Envia um arquivo como documento (sem recompressão), com legenda opcional.
+   * Usado pelo outbox para entregar fotos/PDFs em qualidade original.
+   */
+  async sendDocument(chatId, caminho, legenda = '') {
+    if (!this.sock) throw new Error('WhatsApp ainda não inicializado');
+    const fs = await import('fs');
+    const path = await import('path');
+    const ext = path.extname(caminho).toLowerCase();
+    const mimes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.txt': 'text/plain', '.zip': 'application/zip' };
+    const enviada = await this.sock.sendMessage(normalizarId(chatId), {
+      document: fs.readFileSync(caminho),
+      mimetype: mimes[ext] ?? 'application/octet-stream',
+      fileName: path.basename(caminho),
+      caption: legenda || undefined,
+    });
+    lembrar(this.idsEnviados, enviada?.key?.id);
+  }
+
+  /**
    * Reage a uma mensagem (emoji vazio remove a reação). Serve para confirmar
    * recebimento sem escrever no chat — falha não deve derrubar o handler.
    */

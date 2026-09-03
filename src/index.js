@@ -335,6 +335,7 @@ setInterval(async () => {
 
 // outbox: mensagens enfileiradas por scripts externos (ex: publicar-html)
 // formato: [{ "grupo": "Nome do Grupo", "texto": "..." }] ou [{ "para": "5522...", "texto": "..." }]
+// opcional: "arquivos": ["/caminho/a.jpg", ...] enviados como documento (qualidade original) depois do texto
 import fs from 'fs';
 const OUTBOX = new URL('../outbox.json', import.meta.url).pathname;
 
@@ -385,7 +386,12 @@ async function processarOutboxInterno() {
       } else {
         continue;
       }
-      await enviarPara(chatId, item.texto);
+      if (item.texto) await enviarPara(chatId, item.texto);
+      for (const arq of item.arquivos ?? []) {
+        if (DRY_RUN) { console.log(`[dry-run] enviaria documento ${arq} para ${chatId}`); continue; }
+        await whatsapp.sendDocument(chatId, arq);
+        console.log(`[${new Date().toISOString()}] outbox: documento enviado ${arq}`);
+      }
     } catch (err) {
       console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? '').slice(0, 50)}": ${err.message}`);
       item.tentativas = (item.tentativas || 0) + 1;
