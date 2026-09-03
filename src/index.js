@@ -386,14 +386,18 @@ async function processarOutboxInterno() {
       } else {
         continue;
       }
-      if (item.texto) await enviarPara(chatId, item.texto);
-      for (const arq of item.arquivos ?? []) {
-        if (DRY_RUN) { console.log(`[dry-run] enviaria documento ${arq} para ${chatId}`); continue; }
-        await whatsapp.sendDocument(chatId, arq);
-        console.log(`[${new Date().toISOString()}] outbox: documento enviado ${arq}`);
+      if (item.texto) {
+        await enviarPara(chatId, item.texto);
+        item.texto = null; // se um arquivo falhar depois, a retentativa não repete o texto
+      }
+      while (item.arquivos?.length) {
+        const arq = item.arquivos[0];
+        if (!DRY_RUN) await whatsapp.sendDocument(chatId, arq);
+        console.log(`[${new Date().toISOString()}] outbox: documento ${DRY_RUN ? 'seria enviado' : 'enviado'} ${arq}`);
+        item.arquivos.shift(); // só sai da fila o que já foi entregue
       }
     } catch (err) {
-      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? '').slice(0, 50)}": ${err.message}`);
+      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? item.arquivos?.[0] ?? '').slice(0, 50)}": ${err.message}`);
       item.tentativas = (item.tentativas || 0) + 1;
       if (item.tentativas < 10) restantes.push(item);
     }
