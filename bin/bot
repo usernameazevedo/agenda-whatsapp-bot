@@ -13,6 +13,15 @@ PROJETO_LOCAL="$HOME/claude/agenda-whatsapp"
 PROJETO_REMOTO="${BOT_REMOTO_DIR:-~/agenda-whatsapp}"
 MODO="${1:-}"
 
+# Onde o bot mora. A variável de ambiente ainda funciona, mas NÃO pode ser a
+# única fonte: `export` no ~/.zshrc não vale para shell não interativo, que é
+# como as sessões do Claude rodam comando — e aí a tarefa ia parar no
+# tarefas.json parado do Mac, em silêncio (aconteceu em 06/09/2026). O arquivo
+# abaixo é lido sempre, então o destino não depende de quem chamou.
+if [ -z "${BOT_REMOTO:-}" ] && [ -f "$PROJETO_LOCAL/.bot-remoto" ]; then
+  BOT_REMOTO="$(tr -d '[:space:]' < "$PROJETO_LOCAL/.bot-remoto")"
+fi
+
 if [ -z "$MODO" ]; then
   echo "Uso: bot tarefa|evento|msg ..." >&2
   exit 1

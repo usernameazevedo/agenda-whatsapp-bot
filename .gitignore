@@ -30,3 +30,6 @@ deploy/oracle-launch-retry.out
 deploy/oracle-launch-retry.err
 my-repo.json
 outbox.json
+
+# Onde o bot mora (host do ~/.ssh/config). É estado da máquina, não do repo.
+.bot-remoto
