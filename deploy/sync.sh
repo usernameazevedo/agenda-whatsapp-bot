@@ -25,6 +25,7 @@ rsync -az --delete \
   --exclude '.baileys_auth' \
   --exclude 'downtime.json' \
   --exclude 'execucoes.json' \
+  --exclude 'my-repo.json' \
   --exclude 'qr.png' \
   --exclude 'agenda.log' \
   --exclude '.env' \
