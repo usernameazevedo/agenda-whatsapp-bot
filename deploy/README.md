@@ -152,9 +152,15 @@ reautorização no Mac e copie o `token.json` de novo).
 ```bash
 ssh oracle-bot
 cd ~/agenda-whatsapp
-docker compose -f deploy/docker-compose.yml up -d --build
+BOT_UID=$(id -u) BOT_GID=$(id -g) docker compose -f deploy/docker-compose.yml up -d --build
 docker logs -f agenda-whatsapp
 ```
+
+O `BOT_UID`/`BOT_GID` não é enfeite: a imagem roda como `node` (uid 1000) e o
+Ubuntu da Oracle cria o `ubuntu` como **1001**. Sem eles o container não
+consegue gravar a sessão do WhatsApp no diretório montado e fica reiniciando
+com `EACCES: permission denied, mkdir '/app/.baileys_auth'`. O `sync.sh` já
+passa os dois sozinho.
 
 O QR aparece em ASCII no log e também é salvo em `qr.png`. Para escanear pelo
 celular com conforto, copie a imagem para o Mac:
