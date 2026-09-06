@@ -175,6 +175,13 @@ export class WhatsApp {
       // O bot não precisa marcar mensagens como lidas por conta própria.
       markOnlineOnConnect: false,
       syncFullHistory: false,
+      // O padrão do Baileys é 60s por QR. Quando o bot roda em servidor, o QR
+      // ainda precisa ser copiado de lá, chegar ao celular e ser escaneado —
+      // e 60s não sobrevivem a esse trajeto (falhou assim em 06/09/2026, com
+      // "QR refs attempts ended" no log e mensagem genérica de erro no
+      // WhatsApp). 3 minutos dão folga sem afrouxar nada: o QR continua de uso
+      // único e o vínculo continua sendo aprovado no celular.
+      qrTimeout: 180_000,
     });
     this.sock = sock;
 
