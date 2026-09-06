@@ -19,9 +19,15 @@ if [ -z "$MODO" ]; then
 fi
 
 if [ -n "${BOT_REMOTO:-}" ]; then
-  # docker exec preserva os argumentos com espaços; o container já tem o cwd certo.
+  # `ssh host cmd a b c` NÃO preserva argumentos: o ssh junta tudo numa string
+  # e o shell REMOTO reparte de novo, então as aspas daqui somem. Em 06/09/2026
+  # `bot msg "Teste do canal Claude"` chegou como argumentos separados e o
+  # "do" virou nome de grupo. `printf %q` escapa cada argumento para o shell
+  # remoto reconstruir exatamente o que saiu daqui — mesmo cuidado que o
+  # src/exec.js já tomava para o caminho inverso (servidor → Mac).
+  ARGS=$(printf '%q ' "$@")
   exec ssh "$BOT_REMOTO" \
-    docker exec -w /app agenda-whatsapp node bin/adicionar.js "$@"
+    "docker exec -w /app agenda-whatsapp node bin/adicionar.js $ARGS"
 fi
 
 cd "$PROJETO_LOCAL"
