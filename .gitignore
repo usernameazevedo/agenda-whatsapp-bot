@@ -36,3 +36,6 @@ outbox.json
 
 # Relação de contatos e grupos (números reais): nunca sobe, o repo é público.
 contatos.json
+
+# E-mails da Oracle já repassados ao WhatsApp. Estado desta máquina.
+alertas-oracle.json

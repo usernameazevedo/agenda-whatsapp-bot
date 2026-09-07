@@ -19,6 +19,7 @@ import { diagnosticarAutomacoes } from './diagnostico.js';
 import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { horarioDoCron, agoraLocal, ficouParaTras, lerExecucoes, umaVezPorDia } from './jobs.js';
+import { alertasDeCusto, gmailDisponivel } from './oracle-alertas.js';
 import { capturarLinks, extrairLinks, listarLinks } from './myrepo.js';
 import { t } from './i18n.js';
 
@@ -510,6 +511,17 @@ async function main() {
       const hora = horaAgora();
       for (const msg of lembretesParaAgora(hora)) await enviarMensagem(msg);
     });
+    // Vigia de cobrança da Oracle: a conta saiu do Free Trial e agora consegue
+    // cobrar; o aviso vem por e-mail e é onde ele se perde. De hora em hora, e
+    // NÃO recuperável (a lista de vistos já garante que nada se perde numa
+    // parada — a próxima passagem encontra tudo da janela de 2 dias).
+    if (gmailDisponivel(auth)) {
+      agendar('oracle-alertas', '0 * * * *', null, async () => {
+        for (const aviso of await alertasDeCusto(auth)) await enviarMensagem(aviso);
+      });
+    } else {
+      console.warn('[oracle] vigia de cobrança desligada: token do Google sem escopo gmail.readonly (apague token.json e reautorize).');
+    }
 
     console.log(`Agendado: diário (${CONFIG.cronDiario}), semanal (${CONFIG.cronSemanal}), noturno (${CONFIG.cronNoturno}), lembretes ${CONFIG.lembreteMinutos.join('/')}min antes — ${CONFIG.timezone}`);
     console.log(`Recuperáveis se a máquina dormir por cima do horário: ${jobsRecuperaveis.map((j) => j.nome).join(', ')}`);
