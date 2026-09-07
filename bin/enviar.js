@@ -19,9 +19,10 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import { execFileSync, spawnSync } from 'child_process';
 
-const RAIZ = path.resolve(new URL('..', import.meta.url).pathname);
+const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTATOS = path.join(RAIZ, 'contatos.json');
 const ARQ_REMOTO = path.join(RAIZ, '.bot-remoto');
 const DIR_REMOTO = '~/agenda-whatsapp';
@@ -59,6 +60,11 @@ function resolver(nome, base) {
     ...base.grupos.map((g) => ({ ...g, tipo: 'grupo', valor: g.nome })),
   ];
   const chaves = (e) => [e.nome, ...(e.apelidos ?? [])].map(normalizar);
+  // nomes que o Luis usa e que têm vários cartões: nunca resolver sozinho
+  for (const [k, v] of Object.entries(base.ambiguos ?? {})) {
+    if (k.startsWith('_')) continue;
+    if (normalizar(k.replace(/\(.*\)/, '')) === alvo) return { ambiguos: v.map((n) => ({ tipo: 'para', nome: n, numero: '' })) };
+  }
   const exatos = entradas.filter((e) => chaves(e).includes(alvo));
   if (exatos.length === 1) return { ...exatos[0], rotulo: exatos[0].nome };
   if (exatos.length > 1) return { ambiguos: exatos };
@@ -129,14 +135,23 @@ function ssh(host, cmd, input) {
   return execFileSync('ssh', [host, cmd], { encoding: 'utf8', input, stdio: ['pipe', 'pipe', 'inherit'] });
 }
 
+// aspas simples para o shell remoto: o nome do arquivo vem de fora e não
+// pode virar comando (um "$(...)" no nome rodaria no servidor)
+function shq(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
 function md5Local(arq) {
   return execFileSync('md5', ['-q', arq], { encoding: 'utf8' }).trim();
 }
 
-function slugDe(texto, arquivos) {
-  const base = arquivos.length ? path.basename(path.dirname(path.resolve(arquivos[0]))) : (texto || 'msg').slice(0, 30);
-  const s = normalizar(base).replace(/[^a-z0-9]/g, '-').replace(/^-+|-+$/g, '') || 'envio';
-  return `${new Date().toISOString().slice(0, 10)}_${s}`;
+// pasta remota única por envio: data+hora e o destinatário, para dois envios
+// do mesmo dia (mesmo com arquivos de mesmo nome) nunca caírem juntos
+function slugDe(destinatario) {
+  const s = normalizar(destinatario).replace(/[^a-z0-9]/g, '-').replace(/^-+|-+$/g, '') || 'envio';
+  const agora = new Date();
+  const hora = `${String(agora.getHours()).padStart(2, '0')}${String(agora.getMinutes()).padStart(2, '0')}`;
+  return `${agora.toISOString().slice(0, 10)}_${hora}_${s}`.slice(0, 60);
 }
 
 // Sobe os arquivos e devolve os caminhos como o container os enxerga
@@ -144,7 +159,7 @@ function subirArquivos(host, arquivos, slug) {
   const destinoHost = `${DIR_REMOTO}/envios/${slug}`;
   ssh(host, `mkdir -p ${destinoHost}`);
   execFileSync('scp', ['-q', ...arquivos, `${host}:${destinoHost}/`], { stdio: 'inherit' });
-  const remotos = ssh(host, `cd ${destinoHost} && md5sum -- ${arquivos.map((a) => JSON.stringify(path.basename(a))).join(' ')}`);
+  const remotos = ssh(host, `cd ${destinoHost} && md5sum -- ${arquivos.map((a) => shq(path.basename(a))).join(' ')}`);
   for (const arq of arquivos) {
     const nome = path.basename(arq);
     const linha = remotos.split('\n').find((l) => l.endsWith(`  ${nome}`) || l.endsWith(` ${nome}`));
@@ -185,7 +200,7 @@ function esperarConfirmacao(host, nArquivos, temTexto) {
     try { return JSON.parse(raw); } catch { return null; }
   };
   const lerLog = () => {
-    if (host) return ssh(host, `docker logs --since ${ESPERA_MAX_S + 30}s agenda-whatsapp 2>&1 | grep -E "Bot respondeu|outbox:" || true`);
+    if (host) return ssh(host, `docker logs --since ${ESPERA_MAX_S + 30}s agenda-whatsapp 2>&1 | grep -E "Bot respondeu|dry-run|outbox:" || true`);
     const log = path.join(os.homedir(), '.pm2/logs/agenda-whatsapp-out.log');
     return fs.existsSync(log) ? execFileSync('tail', ['-n', '40', log], { encoding: 'utf8' }) : '';
   };
@@ -193,9 +208,9 @@ function esperarConfirmacao(host, nArquivos, temTexto) {
     const fila = lerFila();
     if (Array.isArray(fila) && fila.length === 0) {
       const log = lerLog().trim().split('\n').filter(Boolean);
-      const enviados = log.filter((l) => l.includes('outbox: documento enviado')).length;
+      const enviados = log.filter((l) => /outbox: documento (seria )?enviado/.test(l)).length;
       const falhas = log.filter((l) => l.includes('outbox: falha'));
-      const respondeu = log.some((l) => l.includes('Bot respondeu'));
+      const respondeu = log.some((l) => l.includes('Bot respondeu') || l.includes('[dry-run] enviaria'));
       console.log(log.slice(-(nArquivos + 3)).join('\n'));
       if (falhas.length) sair(`Bot registrou falha:\n${falhas.join('\n')}`);
       if (temTexto && !respondeu) console.log('Aviso: não vi "Bot respondeu" no log; conferir.');
@@ -221,7 +236,7 @@ if (args[0] === '--quem') {
     const mac = buscarContatosMac(args[1] ?? '');
     console.log(`Não está em contatos.json. Contatos do Mac (${mac.length}):`);
     mac.forEach((l) => console.log('  ' + l));
-    process.exit(mac.length ? 2 : 1);
+    process.exit(2);
   }
   console.log(r.tipo === 'para' && r.rotulo === 'número direto' ? `número direto ${r.valor}` : descrever(r));
   process.exit(0);
@@ -255,7 +270,7 @@ const host = hostRemoto();
 const item = r.tipo === 'grupo' ? { grupo: r.valor } : { para: r.valor };
 if (texto) item.texto = texto;
 if (arquivos.length) {
-  const slug = slugDe(texto, arquivos);
+  const slug = slugDe(r.rotulo);
   item.arquivos = host ? subirArquivos(host, arquivos, slug) : arquivos.map((a) => path.resolve(a));
 }
 console.log(`Destino: ${descrever(r)}${host ? ` | bot em ${host}` : ' | bot local'}`);
