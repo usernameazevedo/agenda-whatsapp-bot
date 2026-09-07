@@ -33,3 +33,6 @@ outbox.json
 
 # Onde o bot mora (host do ~/.ssh/config). É estado da máquina, não do repo.
 .bot-remoto
+
+# Relação de contatos e grupos (números reais): nunca sobe, o repo é público.
+contatos.json
