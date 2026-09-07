@@ -26,6 +26,7 @@ rsync -az --delete \
   --exclude 'downtime.json' \
   --exclude 'execucoes.json' \
   --exclude 'my-repo.json' \
+  --exclude 'alertas-oracle.json' \
   --exclude 'qr.png' \
   --exclude 'agenda.log' \
   --exclude '.env' \
