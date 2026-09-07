@@ -53,6 +53,10 @@ export async function alertasDeCusto(auth) {
     userId: 'me',
     q: CONSULTA,
     maxResults: 25,
+    // A busca do Gmail ignora Spam e Lixeira por padrão. Um aviso de cobrança
+    // classificado como spam é exatamente o que esta vigia existe para não
+    // deixar passar, então aqui a busca inclui os dois.
+    includeSpamTrash: true,
   });
 
   const encontrados = data.messages ?? [];
