@@ -19,7 +19,7 @@ Bot:   ✅ Agendado: Reunião com o cliente — dom., 06/07 15:00
 | Quando | O quê |
 |---|---|
 | Todo dia às 07:00 | Resumo da agenda do dia (horários, locais, links do Meet) |
-| Segunda às 07:00 | Resumo da semana agrupado por dia, com aniversários em destaque |
+| Todo dia às 07:01 | Próximos 7 dias agrupados por dia, com aniversários em destaque |
 | Todo dia às 21:00 | Prévia da agenda de amanhã |
 | 15 min antes de cada reunião | Lembrete com link do Meet pronto pra clicar |
 | Todo dia às 20:00 | **Checagem do dia**: pergunta lembrete a lembrete se foi feito — "N" posterga para amanhã automaticamente |
