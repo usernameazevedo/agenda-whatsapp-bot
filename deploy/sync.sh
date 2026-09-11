@@ -28,6 +28,8 @@ rsync -az --delete \
   --exclude 'my-repo.json' \
   --exclude 'alertas-oracle.json' \
   --exclude 'qr.png' \
+  --exclude 'envios' \
+  --exclude '*.bak-*' \
   --exclude 'agenda.log' \
   --exclude '.env' \
   --exclude 'tarefas.json' \

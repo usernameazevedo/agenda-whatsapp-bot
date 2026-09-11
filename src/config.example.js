@@ -11,7 +11,7 @@ export const CONFIG = {
 
   // Horários de envio (formato cron: minuto hora * * dia-da-semana)
   cronDiario: '0 7 * * *',    // resumo do dia, todo dia às 07:00
-  cronSemanal: '0 7 * * 1',   // resumo da semana, segunda às 07:00
+  cronSemanal: '1 7 * * *',   // próximos 7 dias, todo dia às 07:01 (logo após o resumo do dia)
   cronNoturno: '0 21 * * *',  // prévia de amanhã, todo dia às 21:00
 
   // Lembretes antes de cada compromisso (em minutos). Ex.: [15] ou [30, 10]
