@@ -69,6 +69,14 @@ function textoDaMensagem(mensagem) {
   );
 }
 
+// Texto da mensagem citada, quando esta é uma resposta a outra ("ok"
+// respondendo ao lembrete 🔔 de um evento). Qualquer tipo de mensagem (texto,
+// áudio, imagem) carrega a citação dentro do seu contextInfo.
+function textoCitado(mensagem) {
+  const ctx = Object.values(mensagem ?? {}).find((v) => v && typeof v === 'object' && v.contextInfo)?.contextInfo;
+  return textoDaMensagem(desembrulhar(ctx?.quotedMessage));
+}
+
 // Mensagens efêmeras e "view once" vêm embrulhadas em outra camada.
 function desembrulhar(mensagem) {
   return (
@@ -277,6 +285,7 @@ export class WhatsApp {
         // de um desconhecido.
         autorId: m.key.participant || m.key.remoteJid,
         body: textoDaMensagem(conteudo),
+        citada: textoCitado(conteudo), // '' quando não é resposta a outra mensagem
         isAudio: Boolean(audio),
         nome: m.pushName ?? null,
         baixarAudio: audio

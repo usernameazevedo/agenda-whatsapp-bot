@@ -49,6 +49,14 @@ Rules:
 
 const SYSTEM = LOCALE === 'en' ? SYSTEM_EN : SYSTEM_PT;
 
+// "API Claude retornou 400" não diz nada; o corpo diz o motivo ("Your credit
+// balance is too low", modelo inexistente...). Vai no erro e chega ao WhatsApp.
+export async function erroApi(res) {
+  const corpo = await res.json().catch(() => null);
+  const motivo = corpo?.error?.message;
+  return `API Claude retornou ${res.status}${motivo ? `: ${motivo}` : ''}`;
+}
+
 // Geração de texto livre (ex.: rascunho de mensagem de cobrança)
 export async function gerarTexto(instrucao) {
   if (!API_KEY) return null;
@@ -65,7 +73,7 @@ export async function gerarTexto(instrucao) {
       messages: [{ role: 'user', content: instrucao }],
     }),
   });
-  if (!res.ok) throw new Error(`API Claude retornou ${res.status}`);
+  if (!res.ok) throw new Error(await erroApi(res));
   const data = await res.json();
   return data.content?.[0]?.text ?? null;
 }
@@ -91,7 +99,7 @@ export async function interpretar(texto, pendente = null) {
       messages: [{ role: 'user', content: texto }],
     }),
   });
-  if (!res.ok) throw new Error(`API Claude retornou ${res.status}`);
+  if (!res.ok) throw new Error(await erroApi(res));
   const data = await res.json();
   const raw = data.content?.[0]?.text ?? '';
   const match = raw.match(/\{[\s\S]*\}/);

@@ -642,7 +642,7 @@ async function main() {
           return;
         }
 
-        const resposta = await processarComando(texto, auth, origem);
+        const resposta = await processarComando(texto, auth, origem, { citada: msg.citada });
         if (resposta) {
           await enviarPara(chatId, prefixoAudio + resposta);
           // avisa o dono quando a secretária conclui uma ação na agenda

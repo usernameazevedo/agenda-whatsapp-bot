@@ -34,6 +34,7 @@ Talk like you would to a person — the AI (Claude Haiku) interprets:
 - **Cancel:** *"cancel the dentist"*
 - **Query:** *"what do I have tomorrow?"*, `today`, `week`, `free`
 - **Insistent monthly reminders:** *"pay card day 10"* → escalating nudges (see below)
+- **Mark as done:** *"Hugo recording ok"*, *"done Lucas meeting"* → today's task or event gets a ✅. To a 🔔 event reminder, just reply `ok` (quoting the message, or up to 2h later). These formats don't depend on the AI: they work even when the API is down
 
 ### The flow that prevents disasters
 The bot **never changes your calendar without confirmation**:

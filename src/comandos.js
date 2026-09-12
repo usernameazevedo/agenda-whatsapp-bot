@@ -2,7 +2,8 @@ import { CONFIG } from './config.js';
 import { listarCalendarios, listarEventos } from './calendar.js';
 import { resumoDiario, resumoSemanal } from './formatar.js';
 import { iaDisponivel } from './ia.js';
-import { conduzirConversa, temPendencia, iniciarRecorrente } from './conversa.js';
+import { conduzirConversa, temPendencia, iniciarRecorrente, darBaixa, darBaixaNoEvento } from './conversa.js';
+import { eventoDoUltimoLembrete, esquecerUltimoLembrete } from './lembretes.js';
 import { tentarCheck, listarRecorrentes, removerRecorrente } from './recorrentes.js';
 import {
   marcarFeita,
@@ -49,6 +50,26 @@ function normalizarVoz(lower) {
     .replace(/[.!?\s]+$/, '');
 }
 
+const PALAVRA_FEITO = String.raw`(?:feito|feita|done|ok)`;
+
+// Aviso de conclusão sem número: "ok", "feito", "folhas e frutos ok",
+// "feito a gravação". Devolve { busca } (null = "ok" seco) ou null quando a
+// mensagem não é isso. Recebe o texto já em minúsculas e sem pontuação final.
+export function lerBaixa(lower) {
+  if (new RegExp(`^${PALAVRA_FEITO}$`).test(lower)) return { busca: null };
+  const m =
+    lower.match(new RegExp(`^(.+?)[,;:\\s]+${PALAVRA_FEITO}$`)) ||
+    lower.match(new RegExp(`^${PALAVRA_FEITO}[,:\\s]+(.+)$`));
+  return m ? { busca: m[1].trim() } : null;
+}
+
+// Título em negrito da mensagem do bot que foi citada na resposta
+// ("🔔 *Folhas e Frutos* em 15 min (08:00)" → "Folhas e Frutos").
+export function tituloCitado(citada) {
+  const m = (citada ?? '').match(/\*([^*\n]+)\*/);
+  return m ? m[1].trim() : null;
+}
+
 function janela(dias, offsetDias = 0) {
   const inicio = new Date();
   inicio.setHours(0, 0, 0, 0);
@@ -57,7 +78,7 @@ function janela(dias, offsetDias = 0) {
   return { inicio, fim };
 }
 
-export async function processarComando(texto, auth, origem = 'self') {
+export async function processarComando(texto, auth, origem = 'self', { citada = '' } = {}) {
   const msg = texto.trim();
   const lower = msg.toLowerCase();
 
@@ -110,6 +131,16 @@ export async function processarComando(texto, auth, origem = 'self') {
     if (emCmd(lower, 'semana')) return resumo('semana', auth);
     if (emCmd(lower, 'livre')) return horariosLivres(auth);
     if (emCmd(lower, 'agendas')) return listarAgendas(auth);
+
+    // "ok"/"feito" com ou sem nome, sem passar pela IA: baixa em tarefa
+    // pendente ou evento de hoje. Nasceu do incidente de 12/09/2026: a API
+    // estava sem crédito e "folhas e frutos ok" ao lembrete só dava erro.
+    const baixa = lerBaixa(lower.replace(/[.!?\s]+$/, ''));
+    if (baixa) {
+      const resposta = await baixaSemIA(baixa.busca, citada, auth);
+      if (resposta) return resposta;
+      // com nome e nada encontrado, a IA ainda pode entender ("orçamento Lucas ok")
+    }
   }
 
   if (!iaDisponivel) return t('no.ai');
@@ -162,6 +193,26 @@ async function horariosLivres(auth) {
   if (livres.length === 0) return t('free.full');
   const linhas = livres.map(([a, b]) => `• ${fmtHora.format(a)} – ${fmtHora.format(b)}`).join('\n');
   return t('free.header', { lines: linhas });
+}
+
+// "<nome> ok" procura pelo nome. "ok" seco: o evento do lembrete 🔔 (citado
+// na resposta, ou o último enviado, até 2h), depois a mensagem citada, depois
+// as tarefas (uma pendência só → feita; senão pergunta qual).
+async function baixaSemIA(busca, citada, auth) {
+  if (busca) return darBaixa(busca, auth);
+
+  const citado = tituloCitado(citada);
+  const evento = eventoDoUltimoLembrete();
+  if (evento && (!citado || citado === evento.summary)) {
+    esquecerUltimoLembrete();
+    const resposta = await darBaixaNoEvento(auth, evento.id);
+    if (resposta) return resposta;
+  }
+  if (citado) {
+    const resposta = await darBaixa(citado, auth);
+    if (resposta) return resposta;
+  }
+  return darBaixa(null, auth);
 }
 
 // dá check em um ou vários números de uma vez ("ok 3" / "11, 20, 13 ok")
