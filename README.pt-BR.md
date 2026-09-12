@@ -32,6 +32,7 @@ Fale como falaria com uma pessoa — a IA (Claude Haiku) interpreta:
 - **Cancelar:** *"cancela o dentista"*
 - **Consultar:** *"o que tenho amanhã?"*, `hoje`, `semana`, `livre`
 - **Lembretes mensais insistentes:** *"pagar cartão dia 10"* → cobranças crescentes (veja abaixo)
+- **Dar baixa:** *"gravação Hugo ok"*, *"feito reunião Lucas"* → tarefa ou evento de hoje ganha ✅. Ao lembrete 🔔 de um evento, basta responder `ok` (citando a mensagem ou até 2h depois). Esses formatos não dependem da IA: funcionam mesmo com a API fora do ar
 
 ### O fluxo que evita desastres
 O bot **nunca altera a agenda sem confirmação**:

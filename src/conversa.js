@@ -312,6 +312,13 @@ function contemPalavras(textoAlvo, busca) {
 }
 
 async function concluirPorNome(busca, auth) {
+  return (await darBaixa(busca, auth)) ?? t('done.notfound', { q: busca });
+}
+
+// Dá baixa por nome em tarefa pendente ou evento de hoje. Devolve a resposta,
+// ou null quando não achou nada (o chamador decide se pergunta ou desiste).
+// Também é usada direto por comandos.js, sem passar pela IA.
+export async function darBaixa(busca, auth) {
   const hojePendentes = pendentesDoDia();
 
   // "feito"/"ok" sem dizer o quê: resolve sozinho se só há uma pendência
@@ -332,16 +339,32 @@ async function concluirPorNome(busca, auth) {
   }
 
   // 2) eventos de hoje na agenda
+  const evento = (await eventosDeHoje(auth))
+    .find((e) => !(e.summary ?? '').startsWith('✅') && contemPalavras(e.summary ?? '', busca));
+  if (evento) return marcarEventoFeito(auth, evento);
+
+  return null;
+}
+
+// Baixa no evento de um lembrete recém-enviado. Relê o evento antes: o objeto
+// do lembrete pode estar velho (título já com ✅ por um "nome ok" anterior).
+export async function darBaixaNoEvento(auth, eventoId) {
+  const atual = (await eventosDeHoje(auth)).find((e) => e.id === eventoId);
+  return atual ? marcarEventoFeito(auth, atual) : null;
+}
+
+async function eventosDeHoje(auth) {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const amanha = new Date(hoje.getTime() + 24 * 60 * 60 * 1000);
-  const evento = (await listarEventos(auth, hoje, amanha))
-    .find((e) => !(e.summary ?? '').startsWith('✅') && contemPalavras(e.summary ?? '', busca));
-  if (evento) {
-    await renomearEvento(auth, evento, `✅ ${evento.summary}`);
-    return t('checkdia.markeddone', { title: evento.summary });
-  }
+  return listarEventos(auth, hoje, amanha);
+}
 
-  return t('done.notfound', { q: busca });
+// Prefixo ✅ no título do evento no Google Calendar. Idempotente: dar ok duas
+// vezes no mesmo evento não empilha ✅.
+async function marcarEventoFeito(auth, evento) {
+  const titulo = evento.summary ?? '';
+  if (!titulo.startsWith('✅')) await renomearEvento(auth, evento, `✅ ${titulo}`);
+  return t('checkdia.markeddone', { title: titulo.replace(/^✅\s*/, '') });
 }
 
 function responderOrcCliente(texto, pend, key) {
