@@ -583,7 +583,10 @@ async function main() {
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
 
         // Conversa consigo mesmo (o chat é o próprio número, em qualquer um dos
-        // formatos de ID), ou mensagem SUA no grupo do bot.
+        // formatos de ID), DM de um número autorizado, ou mensagem do dono no
+        // grupo do bot. No grupo o dono é reconhecido pelo autor, não só por
+        // fromMe: quando o bot rodar em número próprio, o dono escreve de outro
+        // número e fromMe passa a significar apenas "o bot disse".
         // Cuidado: "fromMe" sozinho não serve — toda mensagem que o dono manda
         // para terceiros também é fromMe, e viraria comando para o bot.
         const numeroChat = numeroDe(chatId);
@@ -591,7 +594,7 @@ async function main() {
         const isConversaPropria =
           (Boolean(numeroChat) && numeroChat === meuNumero) ||
           numerosAutorizados.has(numeroChat) ||
-          (grupoId && chatId === grupoId && msg.fromMe);
+          (grupoId && chatId === grupoId && (msg.fromMe || numerosAutorizados.has(numeroDe(msg.autorId))));
 
         // Conversa direta com a secretária: só mensagens DELA, não as suas.
         const isSecretaria =
