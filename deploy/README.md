@@ -106,8 +106,10 @@ O script instala Docker, define o fuso, cria 2 GB de swap e instala o Tailscale.
 
 ## 3. Ligar o Mac e o servidor pelo Tailscale
 
-Os comandos `claude:` / `ideia:` / `relatorio` precisam alcançar o Mac, que está
-atrás do NAT da sua internet. O Tailscale resolve sem abrir porta no roteador.
+Os comandos `ideia:` e `relatorio` precisam alcançar o Mac (escrevem em
+Documentos-NOXX, rodam o pipeline do Instagram), que está atrás do NAT da sua
+internet. O Tailscale resolve sem abrir porta no roteador. O `claude:` NÃO
+depende disso: ele lê o espelho (seção 3b) e responde com o Mac desligado.
 
 No Mac:
 1. Instalar o Tailscale e entrar com a mesma conta usada no servidor.
@@ -124,6 +126,37 @@ ssh luisazvedo@<nome-do-mac> 'echo funciona'
 
 Esse nome vai no `MAC_SSH_HOST` do `.env`. Sem isso o bot funciona normalmente,
 só responde que aqueles comandos específicos estão indisponíveis.
+
+## 3b. Espelho do Mac (a ponte `claude:` com o Mac desligado)
+
+O `claude:` roda `claude -p` dentro do container, lendo uma cópia só-leitura
+dos seus documentos que o Mac empurra a cada 10 min (`deploy/espelho.sh`, via
+o LaunchAgent `com.luisazvedo.espelho-bot`). Vai o que é texto e documento
+(md, docx, pdf, xlsx, json, vtt, scripts) de `~/claude` e
+`~/Documents/Clientes`; vídeo, foto e arte-fonte não vão. Vai também o
+`~/.claude` (CLAUDE.md, skills, rules, agents, memória de cada projeto).
+
+No servidor isso vira `~/espelho/` e `~/.claude-bot/`, montados no container
+nos mesmos caminhos absolutos do Mac (`/Users/luisazvedo/...` e
+`/home/node/.claude`). Por isso a ponte não sabe em que máquina está.
+
+Regras:
+- **Só o Mac escreve no espelho.** O container monta `:ro`; o `--delete` do
+  rsync é seguro porque não existe outro escritor.
+- A data da última sincronização fica em `espelho/claude/.espelho-sincronizado`
+  e entra no system prompt ("espelho sincronizado em ..."), para a resposta
+  dizer de quando é o dado.
+- Memória entre mensagens: `claude -p --resume`, com o id em
+  `bridge-sessao.json` (na raiz do projeto, no servidor). `claude: nova` zera.
+- O único comando de shell que a ponte pode rodar é `bin/enviar-dono.sh`, que
+  manda texto/arquivo para o grupo do bot e para mais ninguém.
+
+Ligar no Mac (uma vez):
+```bash
+launchctl load ~/Library/LaunchAgents/com.luisazvedo.espelho-bot.plist
+tail -f ~/claude/agenda-whatsapp/deploy/espelho.log
+```
+A primeira rodada leva uns 6 min (1,6 GB); as seguintes, segundos.
 
 ## 4. Configuração e credenciais
 
@@ -214,6 +247,8 @@ As skills `/bot-agenda` e `/publicar-html` devem chamar `bin/bot` em vez de
 | ver logs | `ssh oracle-bot docker logs -f agenda-whatsapp` |
 | reiniciar | `ssh oracle-bot 'cd ~/agenda-whatsapp && docker compose -f deploy/docker-compose.yml restart'` |
 | atualizar código | `deploy/sync.sh` (no Mac) |
+| forçar o espelho agora | `deploy/espelho.sh` (no Mac) |
+| testar a ponte por dentro | `ssh oracle-bot docker exec agenda-whatsapp claude -p "diga oi"` |
 | backup dos dados | `scp oracle-bot:~/agenda-whatsapp/{tarefas,followups,recorrentes}.json ~/backup/` |
 | uso de recursos | `ssh oracle-bot 'docker stats --no-stream'` |
 

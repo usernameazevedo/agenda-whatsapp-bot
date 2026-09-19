@@ -41,6 +41,13 @@ RUN ARCH_FLAGS=""; \
 FROM node:22-bookworm-slim
 
 ARG WHISPER_MODELO=small
+# uid/gid do dono dos arquivos no host (o Ubuntu da Oracle usa 1001). O
+# compose já rodava o processo com esse uid, mas sem entrada em /etc/passwd:
+# o OpenSSH aborta ("No user exists for uid 1001") e o HOME vira "/", então
+# nem a chave montada em /home/node/.ssh nem o `claude` (que grava em
+# ~/.claude) funcionavam. Renumerar o usuário `node` resolve os dois.
+ARG BOT_UID=1000
+ARG BOT_GID=1000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
@@ -50,6 +57,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 \
       procps \
     && rm -rf /var/lib/apt/lists/*
+
+RUN groupmod -o -g "$BOT_GID" node \
+    && usermod -o -u "$BOT_UID" -g "$BOT_GID" node \
+    && chown -R node:node /home/node
+
+# CLI do Claude Code para a ponte `claude:` rodar aqui, lendo o espelho do
+# Mac. Autentica pela ANTHROPIC_API_KEY do .env (a mesma que o bot já usa).
+RUN npm install -g @anthropic-ai/claude-code && npm cache clean --force
 
 COPY --from=whisper /usr/local/bin/whisper-cli /usr/local/bin/whisper-cli
 COPY --from=whisper /opt/whisper-models /opt/whisper-models

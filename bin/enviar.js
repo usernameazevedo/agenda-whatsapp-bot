@@ -3,6 +3,7 @@
 //
 //   node bin/enviar.js "Paola" "texto da mensagem" [arquivo1 arquivo2 ...]
 //   node bin/enviar.js "marketing macahé" "" foto.jpg        # só arquivo, sem texto
+//   node bin/enviar.js --foto "Paola" "texto" arte.png        # imagem como foto (inline), não como documento
 //   node bin/enviar.js "55<DDD><número>" "texto"             # número direto também vale
 //   node bin/enviar.js --quem "gabi"                          # só resolve, não envia
 //   node bin/enviar.js --lista                                # relação de contatos e grupos
@@ -126,7 +127,10 @@ function listar(base) {
 }
 
 function hostRemoto() {
-  if (process.env.BOT_REMOTO) return process.env.BOT_REMOTO;
+  // BOT_REMOTO="" (definida e vazia) força o modo local: é o que o
+  // enviar-dono.sh usa dentro do container, onde o .bot-remoto copiado do Mac
+  // apontaria para o próprio servidor.
+  if (process.env.BOT_REMOTO !== undefined) return process.env.BOT_REMOTO || null;
   if (fs.existsSync(ARQ_REMOTO)) return fs.readFileSync(ARQ_REMOTO, 'utf8').trim() || null;
   return null;
 }
@@ -199,16 +203,23 @@ function esperarConfirmacao(host, nArquivos, temTexto) {
       : fs.readFileSync(path.join(RAIZ, 'outbox.json'), 'utf8');
     try { return JSON.parse(raw); } catch { return null; }
   };
+  // Local sem pm2 (dentro do container): não há log para ler; a fila vazia
+  // é a única prova, e basta, porque quem esvazia a fila é o próprio bot.
+  const logLocal = path.join(os.homedir(), '.pm2/logs/agenda-whatsapp-out.log');
+  const semLog = !host && !fs.existsSync(logLocal);
   const lerLog = () => {
     if (host) return ssh(host, `docker logs --since ${ESPERA_MAX_S + 30}s agenda-whatsapp 2>&1 | grep -E "Bot respondeu|dry-run|outbox:" || true`);
-    const log = path.join(os.homedir(), '.pm2/logs/agenda-whatsapp-out.log');
-    return fs.existsSync(log) ? execFileSync('tail', ['-n', '40', log], { encoding: 'utf8' }) : '';
+    return semLog ? '' : execFileSync('tail', ['-n', '40', logLocal], { encoding: 'utf8' });
   };
   while (Date.now() - inicio < ESPERA_MAX_S * 1000) {
     const fila = lerFila();
     if (Array.isArray(fila) && fila.length === 0) {
+      if (semLog) {
+        console.log(`OK: fila vazia, ${nArquivos} arquivo(s)${temTexto ? ' + texto' : ''} entregues ao bot.`);
+        return;
+      }
       const log = lerLog().trim().split('\n').filter(Boolean);
-      const enviados = log.filter((l) => /outbox: documento (seria )?enviado/.test(l)).length;
+      const enviados = log.filter((l) => /outbox: (documento (seria )?enviado|foto (seria )?enviada)/.test(l)).length;
       const falhas = log.filter((l) => l.includes('outbox: falha'));
       const respondeu = log.some((l) => l.includes('Bot respondeu') || l.includes('[dry-run] enviaria'));
       console.log(log.slice(-(nArquivos + 3)).join('\n'));
@@ -225,6 +236,8 @@ function esperarConfirmacao(host, nArquivos, temTexto) {
 
 // ---------------------------------------------------------------- main
 const args = process.argv.slice(2);
+const comoFoto = args[0] === '--foto';
+if (comoFoto) args.shift();
 const base = carregarContatos();
 
 if (args[0] === '--lista') { listar(base); process.exit(0); }
@@ -244,7 +257,7 @@ if (args[0] === '--quem') {
 
 const [destino, texto = '', ...arquivos] = args;
 if (!destino || (!texto && arquivos.length === 0)) {
-  sair('Uso: node bin/enviar.js "<nome|grupo|número>" "texto" [arquivo ...]   |   --quem "<nome>"   |   --lista');
+  sair('Uso: node bin/enviar.js [--foto] "<nome|grupo|número>" "texto" [arquivo ...]   |   --quem "<nome>"   |   --lista');
 }
 for (const a of arquivos) if (!fs.existsSync(a)) sair(`Arquivo não existe: ${a}`);
 
@@ -271,7 +284,7 @@ const item = r.tipo === 'grupo' ? { grupo: r.valor } : { para: r.valor };
 if (texto) item.texto = texto;
 if (arquivos.length) {
   const slug = slugDe(r.rotulo);
-  item.arquivos = host ? subirArquivos(host, arquivos, slug) : arquivos.map((a) => path.resolve(a));
+  item[comoFoto ? 'fotos' : 'arquivos'] = host ? subirArquivos(host, arquivos, slug) : arquivos.map((a) => path.resolve(a));
 }
 console.log(`Destino: ${descrever(r)}${host ? ` | bot em ${host}` : ' | bot local'}`);
 enfileirar(host, item);
