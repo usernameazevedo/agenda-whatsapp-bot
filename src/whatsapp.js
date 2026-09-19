@@ -327,6 +327,20 @@ export class WhatsApp {
   }
 
   /**
+   * Envia uma imagem como foto (o WhatsApp recomprime, mas aparece inline na
+   * conversa, não como anexo). Para PDF ou qualidade original, sendDocument.
+   */
+  async sendImage(chatId, caminho, legenda = '') {
+    if (!this.sock) throw new Error('WhatsApp ainda não inicializado');
+    const fs = await import('fs');
+    const enviada = await this.sock.sendMessage(normalizarId(chatId), {
+      image: fs.readFileSync(caminho),
+      caption: legenda || undefined,
+    });
+    lembrar(this.idsEnviados, enviada?.key?.id);
+  }
+
+  /**
    * Reage a uma mensagem (emoji vazio remove a reação). Serve para confirmar
    * recebimento sem escrever no chat — falha não deve derrubar o handler.
    */

@@ -39,3 +39,8 @@ contatos.json
 
 # E-mails da Oracle já repassados ao WhatsApp. Estado desta máquina.
 alertas-oracle.json
+
+# Ponte claude:: id da conversa em andamento (--resume) e log do espelho.
+# Estado da máquina onde o bot roda.
+bridge-sessao.json
+deploy/espelho.log

@@ -337,6 +337,7 @@ setInterval(async () => {
 // outbox: mensagens enfileiradas por scripts externos (ex: publicar-html)
 // formato: [{ "grupo": "Nome do Grupo", "texto": "..." }] ou [{ "para": "5522...", "texto": "..." }]
 // opcional: "arquivos": ["/caminho/a.jpg", ...] enviados como documento (qualidade original) depois do texto
+// opcional: "fotos": ["/caminho/a.jpg", ...] enviados como foto (inline, recomprimida) depois do texto
 import fs from 'fs';
 const OUTBOX = new URL('../outbox.json', import.meta.url).pathname;
 
@@ -391,6 +392,12 @@ async function processarOutboxInterno() {
         await enviarPara(chatId, item.texto);
         item.texto = null; // se um arquivo falhar depois, a retentativa não repete o texto
       }
+      while (item.fotos?.length) {
+        const arq = item.fotos[0];
+        if (!DRY_RUN) await whatsapp.sendImage(chatId, arq);
+        console.log(`[${new Date().toISOString()}] outbox: foto ${DRY_RUN ? 'seria enviada' : 'enviada'} ${arq}`);
+        item.fotos.shift(); // só sai da fila o que já foi entregue
+      }
       while (item.arquivos?.length) {
         const arq = item.arquivos[0];
         if (!DRY_RUN) await whatsapp.sendDocument(chatId, arq);
@@ -398,7 +405,7 @@ async function processarOutboxInterno() {
         item.arquivos.shift(); // só sai da fila o que já foi entregue
       }
     } catch (err) {
-      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? item.arquivos?.[0] ?? '').slice(0, 50)}": ${err.message}`);
+      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? item.fotos?.[0] ?? item.arquivos?.[0] ?? '').slice(0, 50)}": ${err.message}`);
       item.tentativas = (item.tentativas || 0) + 1;
       if (item.tentativas < 10) restantes.push(item);
     }

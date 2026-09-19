@@ -35,6 +35,8 @@ rsync -az --delete \
   --exclude 'tarefas.json' \
   --exclude 'followups.json' \
   --exclude 'outbox.json' \
+  --exclude 'bridge-sessao.json' \
+  --exclude 'deploy/espelho.log' \
   --exclude 'recorrentes.json' \
   --exclude 'token.json' \
   --exclude 'credentials.json' \
