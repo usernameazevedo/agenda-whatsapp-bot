@@ -361,11 +361,21 @@ async function processarOutboxInterno() {
     fila = JSON.parse(fs.readFileSync(OUTBOX, 'utf8'));
   } catch { return; }
   if (!Array.isArray(fila) || fila.length === 0) return;
-  // reivindica a fila imediatamente: esvazia o arquivo antes de enviar,
-  // para que novas execuções não vejam os mesmos itens
-  fs.writeFileSync(OUTBOX, '[]');
+  // reivindica a fila imediatamente: tira do arquivo o que vai sair agora, para
+  // que novas execuções não vejam os mesmos itens. O que fica é o agendado
+  // ("quando" no futuro): o arquivo é o único lugar onde ele sobrevive a um
+  // restart do container, e é por isso que não vai para `restantes` (que só é
+  // gravado no fim do loop e tem contador de tentativas). Item sem "quando", ou
+  // com data ilegível, é para agora: na dúvida envia, não some. Date.parse e não
+  // comparação de string, porque com offset local ("-03:00") a ordem
+  // lexicográfica mente; e `NaN > agora` dá false, que é o fallback certo.
+  const agora = Date.now();
+  const venceu = (i) => !(Date.parse(i.quando) > agora);
+  const fazer = fila.filter(venceu);
+  fs.writeFileSync(OUTBOX, JSON.stringify(fila.filter((i) => !venceu(i)), null, 1));
+  if (!fazer.length) return;
   const restantes = [];
-  for (const item of fila) {
+  for (const item of fazer) {
     try {
       let chatId;
       if (item.grupo) {
