@@ -6,6 +6,7 @@
 //   node bin/enviar.js --foto "Paola" "texto" arte.png        # imagem como foto (inline), não como documento
 //   node bin/enviar.js "55<DDD><número>" "texto"             # número direto também vale
 //   node bin/enviar.js --quem "gabi"                          # só resolve, não envia
+//   node bin/enviar.js --em "2026-10-06 09:00" "Johann" "texto"   # só sai na hora marcada (texto puro)
 //   node bin/enviar.js --lista                                # relação de contatos e grupos
 //
 // O nome é procurado em contatos.json (contatos e grupos, com apelidos). Se
@@ -213,7 +214,10 @@ function esperarConfirmacao(host, nArquivos, temTexto) {
   };
   while (Date.now() - inicio < ESPERA_MAX_S * 1000) {
     const fila = lerFila();
-    if (Array.isArray(fila) && fila.length === 0) {
+    // fila "vazia" ignora os agendados: um item com "quando" mora no
+    // outbox.json até a hora dele, e sem isto TODO envio normal esperaria os
+    // 60s e sairia com erro tendo entregue.
+    if (Array.isArray(fila) && fila.filter((i) => !i.quando).length === 0) {
       if (semLog) {
         console.log(`OK: fila vazia, ${nArquivos} arquivo(s)${temTexto ? ' + texto' : ''} entregues ao bot.`);
         return;
@@ -238,6 +242,15 @@ function esperarConfirmacao(host, nArquivos, temTexto) {
 const args = process.argv.slice(2);
 const comoFoto = args[0] === '--foto';
 if (comoFoto) args.shift();
+// --em "<quando>": o item fica no outbox.json até a hora e o bot solta sozinho.
+// Aceita "2026-10-06 09:00", "06/10 09:00", "amanhã 08:00". Hora sem minuto
+// ("9h") o chrono ignora em silêncio, e é para isso que o horário resolvido é
+// impresso de volta: confira a linha antes de soltar. Cancelar é apagar a linha
+// do outbox.json.
+const iEm = args.indexOf('--em');
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const quando = iEm < 0 ? null : (await import('chrono-node')).pt.parseDate(args.splice(iEm, 2)[1] ?? '', new Date(), { forwardDate: true });
+if (iEm >= 0 && !quando) sair('Não entendi o --em. Ex: --em "2026-10-06 09:00" ou --em "amanhã 08:00".');
 const base = carregarContatos();
 
 if (args[0] === '--lista') { listar(base); process.exit(0); }
@@ -282,10 +295,18 @@ if (r.erro) {
 const host = hostRemoto();
 const item = r.tipo === 'grupo' ? { grupo: r.valor } : { para: r.valor };
 if (texto) item.texto = texto;
+if (quando) {
+  // anexo agendado é promessa que não se controla: o material fica em
+  // ~/agenda-whatsapp/envios/<slug>/ e congela no dia do agendamento.
+  if (arquivos.length) sair('--em é só para texto. Anexo agendado congela o material; mande o arquivo na hora.');
+  item.quando = quando.toISOString();
+  console.log(`vai sair em ${quando.toLocaleString('pt-BR', { timeZone: TZ })} ${TZ}`);
+}
 if (arquivos.length) {
   const slug = slugDe(r.rotulo);
   item[comoFoto ? 'fotos' : 'arquivos'] = host ? subirArquivos(host, arquivos, slug) : arquivos.map((a) => path.resolve(a));
 }
 console.log(`Destino: ${descrever(r)}${host ? ` | bot em ${host}` : ' | bot local'}`);
 enfileirar(host, item);
-esperarConfirmacao(host, arquivos.length, Boolean(texto));
+if (quando) console.log('Agendado. Para cancelar, apague a linha do outbox.json.');
+else esperarConfirmacao(host, arquivos.length, Boolean(texto));
