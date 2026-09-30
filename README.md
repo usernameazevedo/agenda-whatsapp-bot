@@ -21,7 +21,7 @@ Bot:  ✅ Scheduled: Meeting with the client — Sun, 07/06 3:00pm
 | When | What |
 |---|---|
 | Every day at 07:00 | Summary of today's agenda (times, locations, Meet links) |
-| Monday at 07:00 | Week summary grouped by day, with birthdays highlighted |
+| Every day at 07:01 | Next 7 days grouped by day, with birthdays highlighted |
 | Every day at 21:00 | Preview of tomorrow's agenda |
 | 15 min before each meeting | Reminder with the Meet link ready to tap |
 | Every day at 20:00 | **End-of-day check**: asks reminder by reminder if it was done — "N" auto-postpones to tomorrow |
@@ -34,6 +34,7 @@ Talk like you would to a person — the AI (Claude Haiku) interprets:
 - **Cancel:** *"cancel the dentist"*
 - **Query:** *"what do I have tomorrow?"*, `today`, `week`, `free`
 - **Insistent monthly reminders:** *"pay card day 10"* → escalating nudges (see below)
+- **Mark as done:** *"Hugo recording ok"*, *"done Lucas meeting"* → today's task or event gets a ✅. To a 🔔 event reminder, just reply `ok` (quoting the message, or up to 2h later). These formats don't depend on the AI: they work even when the API is down
 
 ### The flow that prevents disasters
 The bot **never changes your calendar without confirmation**:
