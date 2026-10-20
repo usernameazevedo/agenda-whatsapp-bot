@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enciclopédia de Mídias</title>
+<style>
+:root{
+  --bg:#faf7f2;--surface:#ffffff;--surface-2:#f2ece3;--text:#22190f;--muted:#6f6254;
+  --line:#e4dacb;--accent:#c2410c;--accent-soft:#fde7d9;--video:#1d4ed8;--raw:#7c3aed;
+  --shadow:0 1px 2px rgba(34,25,15,.06),0 4px 14px rgba(34,25,15,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#15110d;--surface:#1f1a14;--surface-2:#2a231b;--text:#f3ece2;--muted:#ab9d8c;
+  --line:#3a3127;--accent:#fb8a4c;--accent-soft:#3b2416;--video:#7aa2ff;--raw:#b794ff;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+}}
+:root[data-theme="dark"]{
+  --bg:#15110d;--surface:#1f1a14;--surface-2:#2a231b;--text:#f3ece2;--muted:#ab9d8c;
+  --line:#3a3127;--accent:#fb8a4c;--accent-soft:#3b2416;--video:#7aa2ff;--raw:#b794ff;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:inherit}
+header{padding:28px 16px 8px;max-width:1400px;margin:0 auto}
+h1{margin:0;font-size:clamp(24px,4vw,34px);letter-spacing:-.02em}
+.sub{color:var(--muted);margin:4px 0 0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;max-width:1400px;margin:18px auto 0;padding:0 16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:24px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+.uso{max-width:1400px;margin:18px auto 0;padding:0 16px}
+.uso details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.uso summary{cursor:pointer;font-weight:600}
+.barra{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:12px 0 6px;background:var(--surface-2)}
+.barra i{display:block;height:100%}
+.uso table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.uso td{padding:5px 4px;border-top:1px solid var(--line)}
+.uso td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.layout{display:grid;grid-template-columns:280px 1fr;gap:20px;max-width:1400px;margin:20px auto;padding:0 16px}
+aside{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px}
+aside button{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;border:0;background:none;color:var(--text);padding:6px 8px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px}
+aside button:hover{background:var(--surface-2)}
+aside button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+aside button small{color:var(--muted);font-variant-numeric:tabular-nums}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.toolbar input,.toolbar select{font:inherit;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+.toolbar input{flex:1 1 220px;min-width:0}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.info{color:var(--muted);font-size:13px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);text-decoration:none;display:flex;flex-direction:column}
+.card:hover{border-color:var(--accent)}
+.thumb{aspect-ratio:1/1;background:var(--surface-2);position:relative;display:grid;place-items:center;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .ph{font-size:12px;color:var(--muted);text-align:center;padding:8px}
+.tag{position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,.6);color:#fff}
+.tag.video{background:var(--video)}.tag.raw{background:var(--raw)}
+.meta{padding:8px 10px;font-size:12px}
+.meta .nome{font-weight:600;word-break:break-all;line-height:1.3}
+.meta .det{color:var(--muted);margin-top:2px}
+.mais{display:block;margin:18px auto;padding:10px 18px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
+.aviso{max-width:1400px;margin:14px auto 0;padding:0 16px;color:var(--muted);font-size:13px}
+@media (max-width:820px){
+  .layout{grid-template-columns:1fr}
+  aside{position:static;max-height:260px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Enciclopédia de Mídias</h1>
+  <p class="sub" id="sub"></p>
+</header>
+<section class="stats" id="stats"></section>
+<section class="uso"><details><summary>Espaço ocupado por pasta</summary><div class="barra" id="barra"></div><table id="tabela"></table></details></section>
+<p class="aviso">As miniaturas vêm direto do Google Drive: aparecem quando você está logado numa conta com acesso às pastas. Clique em qualquer item para abrir o original no Drive.</p>
+<div class="layout">
+  <aside id="pastas"></aside>
+  <main>
+    <div class="toolbar">
+      <input id="busca" type="search" placeholder="Buscar por nome ou pasta…">
+      <button class="chip on" data-f="todos">Todos</button>
+      <button class="chip" data-f="foto">Fotos</button>
+      <button class="chip" data-f="raw">RAW</button>
+      <button class="chip" data-f="video">Vídeos</button>
+      <select id="ordem">
+        <option value="pasta">Ordenar: pasta</option>
+        <option value="recente">Mais recentes</option>
+        <option value="maior">Maiores</option>
+        <option value="nome">Nome</option>
+      </select>
+    </div>
+    <p class="info" id="info"></p>
+    <div class="grid" id="grid"></div>
+    <button class="mais" id="mais" hidden>Carregar mais</button>
+  </main>
+</div>
+<script>
+const DADOS = __DADOS__;
+const A = DADOS.arquivos;
+const PAGINA = 120;
+const $ = id => document.getElementById(id);
+const gb = b => b >= 1e9 ? (b/1e9).toFixed(2).replace('.',',')+' GB' : b >= 1e6 ? (b/1e6).toFixed(1).replace('.',',')+' MB' : Math.round(b/1e3)+' KB';
+const data = s => new Date(s).toLocaleDateString('pt-BR');
+const tipo = a => a.tipo.startsWith('video/') ? 'video' : a.ext === 'ARW' ? 'raw' : 'foto';
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const total = A.reduce((s,a)=>s+a.bytes,0);
+const cont = {foto:0,raw:0,video:0};
+A.forEach(a=>cont[tipo(a)]++);
+$('sub').textContent = `Fotos e vídeos do Drive ${DADOS.conta} · levantamento de ${data(DADOS.gerado_em+'T12:00:00')}`;
+$('stats').innerHTML = [
+  [A.length.toLocaleString('pt-BR'),'arquivos de mídia'],
+  [gb(total),'espaço ocupado'],
+  [cont.foto,'fotos e artes (JPG/PNG/SVG)'],
+  [cont.raw,'fotos RAW (Sony .ARW)'],
+  [cont.video,'vídeos (MP4)'],
+].map(([b,s])=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+
+// espaço por pasta de primeiro nível dentro de cada raiz
+const grupo = p => p.split('/').slice(0, p.startsWith('MB Entregas Design') ? 3 : 1).join('/');
+const porGrupo = {};
+A.forEach(a=>{const g=grupo(a.pasta);(porGrupo[g]??={n:0,b:0});porGrupo[g].n++;porGrupo[g].b+=a.bytes});
+const cores = ['#c2410c','#7c3aed','#1d4ed8','#0f766e','#b45309','#be185d','#4d7c0f','#475569','#0369a1','#a16207'];
+const grupos = Object.entries(porGrupo).sort((x,y)=>y[1].b-x[1].b);
+$('barra').innerHTML = grupos.map(([g,v],i)=>`<i title="${esc(g)}: ${gb(v.b)}" style="width:${v.b/total*100}%;background:${cores[i%cores.length]}"></i>`).join('');
+$('tabela').innerHTML = grupos.map(([g,v],i)=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${cores[i%cores.length]};margin-right:6px"></span>${esc(g)}</td><td class="n">${v.n} itens</td><td class="n">${gb(v.b)}</td><td class="n">${(v.b/total*100).toFixed(1).replace('.',',')}%</td></tr>`).join('');
+
+// barra lateral de pastas
+const porPasta = {};
+A.forEach(a=>porPasta[a.pasta]=(porPasta[a.pasta]||0)+1);
+let pasta = '', filtro = 'todos', busca = '', ordem = 'pasta', mostrando = PAGINA;
+function lateral(){
+  const itens = [['', 'Todas as pastas', A.length], ...Object.keys(porPasta).sort().map(p=>[p, p.replace(/^MB Entregas Design\//,'MB › ').replace(/\//g,' › '), porPasta[p]])];
+  $('pastas').innerHTML = itens.map(([p,l,n])=>`<button data-p="${esc(p)}" class="${p===pasta?'on':''}"><span>${esc(l)}</span><small>${n}</small></button>`).join('');
+}
+$('pastas').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;pasta=b.dataset.p;mostrando=PAGINA;lateral();render()});
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{filtro=c.dataset.f;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));mostrando=PAGINA;render()}));
+$('busca').addEventListener('input',e=>{busca=e.target.value.trim().toLowerCase();mostrando=PAGINA;render()});
+$('ordem').addEventListener('change',e=>{ordem=e.target.value;render()});
+$('mais').addEventListener('click',()=>{mostrando+=PAGINA;render()});
+
+function card(a){
+  const t = tipo(a);
+  const tag = t==='video'?'<span class="tag video">▶ VÍDEO</span>':t==='raw'?'<span class="tag raw">RAW</span>':`<span class="tag">${esc(a.ext||'IMG')}</span>`;
+  const url = `https://drive.google.com/file/d/${a.id}/view`;
+  const thumb = `https://drive.google.com/thumbnail?id=${a.id}&sz=w400`;
+  return `<a class="card" href="${url}" target="_blank" rel="noopener">
+    <div class="thumb">${tag}<img loading="lazy" src="${thumb}" alt="${esc(a.nome)}" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'Sem miniatura · abrir no Drive'}))"></div>
+    <div class="meta"><div class="nome">${esc(a.nome)}</div><div class="det">${gb(a.bytes)} · ${data(a.criado)}</div><div class="det">${esc(a.pasta.split('/').slice(-2).join(' › '))}</div></div>
+  </a>`;
+}
+function render(){
+  let l = A.filter(a=>(!pasta||a.pasta===pasta)&&(filtro==='todos'||tipo(a)===filtro)&&(!busca||(a.nome+' '+a.pasta).toLowerCase().includes(busca)));
+  const cmp = {pasta:(x,y)=>x.pasta.localeCompare(y.pasta)||x.nome.localeCompare(y.nome),recente:(x,y)=>y.criado.localeCompare(x.criado),maior:(x,y)=>y.bytes-x.bytes,nome:(x,y)=>x.nome.localeCompare(y.nome)}[ordem];
+  l = l.slice().sort(cmp);
+  $('info').textContent = `${l.length} itens · ${gb(l.reduce((s,a)=>s+a.bytes,0))}` + (l.length>mostrando?` · mostrando ${mostrando}`:'');
+  $('grid').innerHTML = l.slice(0,mostrando).map(card).join('') || '<p class="info">Nada encontrado.</p>';
+  $('mais').hidden = l.length<=mostrando;
+}
+lateral(); render();
+</script>
+</body>
+</html>
