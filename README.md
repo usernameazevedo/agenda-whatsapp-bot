@@ -55,6 +55,7 @@ To stop, just send anything with a completion verb + a keyword: *"paid the card"
 
 ### Extras
 - 💰 **Quote follow-up:** when you schedule "send quote X", it offers to chase the reply in N days — and on the day, asks if there was a response; if not, creates a follow-up reminder and drafts a message for you
+- 🎤 **Other people's voice notes:** *"transcribe the last voice note from John"* — the bot keeps a reference to each contact's latest voice note as it arrives and transcribes it on request. Owner only: the secretary can't ask for it
 - 👩‍💼 **Secretary mode:** a second authorized number can schedule/edit your calendar (you get notified of every action)
 - 🛡️ **Self-healing watchdog:** if it hangs or disconnects, it restarts itself, cleaning up orphaned processes
 - 🔔 Native macOS notifications when something needs you (session expired, Google failure)

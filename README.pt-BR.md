@@ -53,6 +53,7 @@ Para parar, é só mandar algo com um verbo de conclusão + uma palavra do títu
 
 ### Extras
 - 💰 **Follow-up de orçamento:** ao marcar "enviar orçamento X", ele oferece cobrar retorno em N dias — e no dia, pergunta se houve resposta; sem resposta, cria lembrete de cobrança e sugere um texto pronto
+- 🎤 **Áudio de outros contatos:** *"transcreve o último áudio do Johann"* — o bot guarda a referência do áudio mais recente de cada contato quando ele chega e transcreve quando você pede. Só o dono pode pedir: a secretária não
 - 👩‍💼 **Modo secretária:** um segundo número autorizado pode marcar/alterar na sua agenda (você recebe aviso de cada ação)
 - 🛡️ **Watchdog de autocura:** se travar ou desconectar, reinicia sozinho com limpeza de processos órfãos
 - 🔔 Notificações nativas do macOS quando algo precisa de você (sessão expirada, falha no Google)

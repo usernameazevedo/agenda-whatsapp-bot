@@ -30,3 +30,5 @@ deploy/oracle-launch-retry.out
 deploy/oracle-launch-retry.err
 my-repo.json
 outbox.json
+# referência dos áudios recebidos de cada contato (dado de terceiros)
+audios-recebidos.json

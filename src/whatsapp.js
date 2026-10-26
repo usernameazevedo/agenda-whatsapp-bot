@@ -272,6 +272,10 @@ export class WhatsApp {
         body: textoDaMensagem(conteudo),
         isAudio: Boolean(audio),
         nome: m.pushName ?? null,
+        hora: horaEmMs(m),
+        // mensagem bruta só para áudio: é o que permite baixá-lo mais tarde,
+        // quando o dono pedir a transcrição de um áudio de terceiro
+        mensagemBruta: audio ? m : null,
         baixarAudio: audio
           ? async () => {
               const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: loggerSilencioso });
@@ -301,6 +305,22 @@ export class WhatsApp {
     // mesmo cuidado do sendMessage: o Baileys devolve o que enviamos como
     // 'append', e sem o id guardado a reação volta pelo caminho de entrada
     lembrar(this.idsEnviados, enviada?.key?.id);
+  }
+
+  /**
+   * Baixa a mídia de uma mensagem guardada antes, em base64. Mídia antiga pode
+   * ter saído do servidor do WhatsApp; o reuploadRequest pede ao celular que
+   * a reenvie, em vez de falhar com 404/410.
+   */
+  async baixarMidia(mensagem) {
+    if (!this.sock) throw new Error('WhatsApp ainda não inicializado');
+    const buffer = await downloadMediaMessage(
+      mensagem,
+      'buffer',
+      {},
+      { logger: loggerSilencioso, reuploadRequest: this.sock.updateMediaMessage },
+    );
+    return buffer.toString('base64');
   }
 
   /** Lista os grupos de que o número participa: [{ id, name }]. */

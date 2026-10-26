@@ -20,7 +20,8 @@ import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { horarioDoCron, agoraLocal, ficouParaTras, lerExecucoes, umaVezPorDia } from './jobs.js';
 import { capturarLinks, extrairLinks, listarLinks } from './myrepo.js';
-import { t } from './i18n.js';
+import { t, fmtDataHora } from './i18n.js';
+import { registrarAudio, buscarUltimoAudio, pedidoDeTranscricao } from './audios-recebidos.js';
 
 const whatsapp = new WhatsApp();
 
@@ -556,6 +557,23 @@ async function main() {
           return;
         }
 
+        // Áudio de qualquer contato: guarda a referência ANTES do gate de autor
+        // logo abaixo, que descarta mensagem de terceiro. É o que permite ao
+        // dono pedir depois "transcreve o último áudio do Johann".
+        if (msg.isAudio && !msg.fromMe && msg.mensagemBruta) {
+          try {
+            registrarAudio({
+              autorId: msg.autorId,
+              chatId,
+              nome: msg.nome,
+              hora: msg.hora,
+              mensagem: msg.mensagemBruta,
+            });
+          } catch (err) {
+            console.error('[audios] falha ao guardar referência:', err.message);
+          }
+        }
+
         const isGroup = ehGrupo(chatId);
         const isAudio = audioDisponivel && msg.isAudio;
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
@@ -605,6 +623,20 @@ async function main() {
 
         console.log(`[${new Date().toISOString()}] Mensagem recebida (${origem}): ${texto.slice(0, 60)}`);
 
+        // "transcreve o último áudio do Johann": ouvir conversa de terceiros é
+        // prerrogativa do dono. A secretária pode comandar a agenda, mas não
+        // ler áudio que outra pessoa mandou para o dono.
+        const quemTranscrever = pedidoDeTranscricao(texto);
+        if (quemTranscrever) {
+          if (origem !== 'self') {
+            console.log(`[audios] pedido de transcrição negado (${origem})`);
+            await enviarPara(chatId, prefixoAudio + t('audio.other.denied'));
+            return;
+          }
+          await enviarPara(chatId, prefixoAudio + (await transcreverAudioDe(quemTranscrever)));
+          return;
+        }
+
         // ponte Claude/relatório: responde na hora e roda em background
         const bridge = interceptarBridge(texto, origem);
         if (bridge) {
@@ -635,6 +667,36 @@ async function main() {
         } catch {}
       }
     });
+    // Acha o último áudio do contato pedido, baixa e transcreve. Devolve sempre
+    // uma resposta pronta para o chat: cada falha diz em que passo parou.
+    async function transcreverAudioDe(quem) {
+      if (!audioDisponivel) return t('audio.other.unavailable');
+      const registro = buscarUltimoAudio(quem);
+      if (!registro) return t('audio.other.notfound', { q: quem });
+      const vars = {
+        name: registro.nome || numeroDe(registro.autorId),
+        when: fmtDataHora.format(new Date(registro.hora)),
+      };
+      console.log(`[audios] transcrevendo último áudio de ${vars.name} (${vars.when})`);
+      let dados;
+      try {
+        dados = await whatsapp.baixarMidia(registro.mensagem);
+      } catch (err) {
+        console.error('[audios] falha ao baixar:', err.message);
+        return t('audio.other.fail', { ...vars, step: t('audio.other.step.download'), err: err.message });
+      }
+      // áudio de terceiro costuma ser mais longo que comando de voz: o whisper
+      // pode estourar o tempo, e isso tem de virar resposta, não exceção solta
+      const texto = await transcreverAudio(dados).catch((err) => {
+        console.error('[audios] falha ao transcrever:', err.message);
+        return null;
+      });
+      if (!texto) {
+        return t('audio.other.fail', { ...vars, step: t('audio.other.step.transcribe'), err: 'whisper sem resultado' });
+      }
+      return t('audio.other.heard', { ...vars, text: texto });
+    }
+
     console.log('Comandos via WhatsApp ativos (envie "ajuda" na conversa com você mesmo).');
   });
 
