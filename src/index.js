@@ -19,6 +19,7 @@ import { diagnosticarAutomacoes } from './diagnostico.js';
 import { verificacaoDiaria } from './verificacao.js';
 import { notificar, registrarErroGoogle, registrarSucessoGoogle } from './saude.js';
 import { horarioDoCron, agoraLocal, ficouParaTras, lerExecucoes, umaVezPorDia } from './jobs.js';
+import { alertasDeCusto, gmailDisponivel } from './oracle-alertas.js';
 import { capturarLinks, extrairLinks, listarLinks } from './myrepo.js';
 import { t } from './i18n.js';
 
@@ -335,6 +336,8 @@ setInterval(async () => {
 
 // outbox: mensagens enfileiradas por scripts externos (ex: publicar-html)
 // formato: [{ "grupo": "Nome do Grupo", "texto": "..." }] ou [{ "para": "5522...", "texto": "..." }]
+// opcional: "arquivos": ["/caminho/a.jpg", ...] enviados como documento (qualidade original) depois do texto
+// opcional: "fotos": ["/caminho/a.jpg", ...] enviados como foto (inline, recomprimida) depois do texto
 import fs from 'fs';
 const OUTBOX = new URL('../outbox.json', import.meta.url).pathname;
 
@@ -358,11 +361,21 @@ async function processarOutboxInterno() {
     fila = JSON.parse(fs.readFileSync(OUTBOX, 'utf8'));
   } catch { return; }
   if (!Array.isArray(fila) || fila.length === 0) return;
-  // reivindica a fila imediatamente: esvazia o arquivo antes de enviar,
-  // para que novas execuções não vejam os mesmos itens
-  fs.writeFileSync(OUTBOX, '[]');
+  // reivindica a fila imediatamente: tira do arquivo o que vai sair agora, para
+  // que novas execuções não vejam os mesmos itens. O que fica é o agendado
+  // ("quando" no futuro): o arquivo é o único lugar onde ele sobrevive a um
+  // restart do container, e é por isso que não vai para `restantes` (que só é
+  // gravado no fim do loop e tem contador de tentativas). Item sem "quando", ou
+  // com data ilegível, é para agora: na dúvida envia, não some. Date.parse e não
+  // comparação de string, porque com offset local ("-03:00") a ordem
+  // lexicográfica mente; e `NaN > agora` dá false, que é o fallback certo.
+  const agora = Date.now();
+  const venceu = (i) => !(Date.parse(i.quando) > agora);
+  const fazer = fila.filter(venceu);
+  fs.writeFileSync(OUTBOX, JSON.stringify(fila.filter((i) => !venceu(i)), null, 1));
+  if (!fazer.length) return;
   const restantes = [];
-  for (const item of fila) {
+  for (const item of fazer) {
     try {
       let chatId;
       if (item.grupo) {
@@ -385,9 +398,24 @@ async function processarOutboxInterno() {
       } else {
         continue;
       }
-      await enviarPara(chatId, item.texto);
+      if (item.texto) {
+        await enviarPara(chatId, item.texto);
+        item.texto = null; // se um arquivo falhar depois, a retentativa não repete o texto
+      }
+      while (item.fotos?.length) {
+        const arq = item.fotos[0];
+        if (!DRY_RUN) await whatsapp.sendImage(chatId, arq);
+        console.log(`[${new Date().toISOString()}] outbox: foto ${DRY_RUN ? 'seria enviada' : 'enviada'} ${arq}`);
+        item.fotos.shift(); // só sai da fila o que já foi entregue
+      }
+      while (item.arquivos?.length) {
+        const arq = item.arquivos[0];
+        if (!DRY_RUN) await whatsapp.sendDocument(chatId, arq);
+        console.log(`[${new Date().toISOString()}] outbox: documento ${DRY_RUN ? 'seria enviado' : 'enviado'} ${arq}`);
+        item.arquivos.shift(); // só sai da fila o que já foi entregue
+      }
     } catch (err) {
-      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? '').slice(0, 50)}": ${err.message}`);
+      console.error(`outbox: falha ao enviar [${item.grupo ?? item.para}] "${(item.texto ?? item.fotos?.[0] ?? item.arquivos?.[0] ?? '').slice(0, 50)}": ${err.message}`);
       item.tentativas = (item.tentativas || 0) + 1;
       if (item.tentativas < 10) restantes.push(item);
     }
@@ -500,6 +528,17 @@ async function main() {
       const hora = horaAgora();
       for (const msg of lembretesParaAgora(hora)) await enviarMensagem(msg);
     });
+    // Vigia de cobrança da Oracle: a conta saiu do Free Trial e agora consegue
+    // cobrar; o aviso vem por e-mail e é onde ele se perde. De hora em hora, e
+    // NÃO recuperável (a lista de vistos já garante que nada se perde numa
+    // parada — a próxima passagem encontra tudo da janela de 2 dias).
+    if (gmailDisponivel(auth)) {
+      agendar('oracle-alertas', '0 * * * *', null, async () => {
+        for (const aviso of await alertasDeCusto(auth)) await enviarMensagem(aviso);
+      });
+    } else {
+      console.warn('[oracle] vigia de cobrança desligada: token do Google sem escopo gmail.readonly (apague token.json e reautorize).');
+    }
 
     console.log(`Agendado: diário (${CONFIG.cronDiario}), semanal (${CONFIG.cronSemanal}), noturno (${CONFIG.cronNoturno}), lembretes ${CONFIG.lembreteMinutos.join('/')}min antes — ${CONFIG.timezone}`);
     console.log(`Recuperáveis se a máquina dormir por cima do horário: ${jobsRecuperaveis.map((j) => j.nome).join(', ')}`);
@@ -561,7 +600,10 @@ async function main() {
         if (!isAudio && (!msg.body || msg.body.startsWith(MARCA_BOT) || PREFIXOS_BOT.some((p) => msg.body.startsWith(p)))) return;
 
         // Conversa consigo mesmo (o chat é o próprio número, em qualquer um dos
-        // formatos de ID), ou mensagem SUA no grupo do bot.
+        // formatos de ID), DM de um número autorizado, ou mensagem do dono no
+        // grupo do bot. No grupo o dono é reconhecido pelo autor, não só por
+        // fromMe: quando o bot rodar em número próprio, o dono escreve de outro
+        // número e fromMe passa a significar apenas "o bot disse".
         // Cuidado: "fromMe" sozinho não serve — toda mensagem que o dono manda
         // para terceiros também é fromMe, e viraria comando para o bot.
         const numeroChat = numeroDe(chatId);
@@ -569,7 +611,7 @@ async function main() {
         const isConversaPropria =
           (Boolean(numeroChat) && numeroChat === meuNumero) ||
           numerosAutorizados.has(numeroChat) ||
-          (grupoId && chatId === grupoId && msg.fromMe);
+          (grupoId && chatId === grupoId && (msg.fromMe || numerosAutorizados.has(numeroDe(msg.autorId))));
 
         // Conversa direta com a secretária: só mensagens DELA, não as suas.
         const isSecretaria =
@@ -620,7 +662,7 @@ async function main() {
           return;
         }
 
-        const resposta = await processarComando(texto, auth, origem);
+        const resposta = await processarComando(texto, auth, origem, { citada: msg.citada });
         if (resposta) {
           await enviarPara(chatId, prefixoAudio + resposta);
           // avisa o dono quando a secretária conclui uma ação na agenda

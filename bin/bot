@@ -13,15 +13,30 @@ PROJETO_LOCAL="$HOME/claude/agenda-whatsapp"
 PROJETO_REMOTO="${BOT_REMOTO_DIR:-~/agenda-whatsapp}"
 MODO="${1:-}"
 
+# Onde o bot mora. A variável de ambiente ainda funciona, mas NÃO pode ser a
+# única fonte: `export` no ~/.zshrc não vale para shell não interativo, que é
+# como as sessões do Claude rodam comando — e aí a tarefa ia parar no
+# tarefas.json parado do Mac, em silêncio (aconteceu em 06/09/2026). O arquivo
+# abaixo é lido sempre, então o destino não depende de quem chamou.
+if [ -z "${BOT_REMOTO:-}" ] && [ -f "$PROJETO_LOCAL/.bot-remoto" ]; then
+  BOT_REMOTO="$(tr -d '[:space:]' < "$PROJETO_LOCAL/.bot-remoto")"
+fi
+
 if [ -z "$MODO" ]; then
   echo "Uso: bot tarefa|evento|msg ..." >&2
   exit 1
 fi
 
 if [ -n "${BOT_REMOTO:-}" ]; then
-  # docker exec preserva os argumentos com espaços; o container já tem o cwd certo.
+  # `ssh host cmd a b c` NÃO preserva argumentos: o ssh junta tudo numa string
+  # e o shell REMOTO reparte de novo, então as aspas daqui somem. Em 06/09/2026
+  # `bot msg "Teste do canal Claude"` chegou como argumentos separados e o
+  # "do" virou nome de grupo. `printf %q` escapa cada argumento para o shell
+  # remoto reconstruir exatamente o que saiu daqui — mesmo cuidado que o
+  # src/exec.js já tomava para o caminho inverso (servidor → Mac).
+  ARGS=$(printf '%q ' "$@")
   exec ssh "$BOT_REMOTO" \
-    docker exec -w /app agenda-whatsapp node bin/adicionar.js "$@"
+    "docker exec -w /app agenda-whatsapp node bin/adicionar.js $ARGS"
 fi
 
 cd "$PROJETO_LOCAL"

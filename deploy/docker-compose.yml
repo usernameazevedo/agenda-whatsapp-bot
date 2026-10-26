@@ -5,10 +5,22 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      # Mesmo uid/gid do `user:` abaixo, para o usuário existir de verdade
+      # dentro da imagem (ssh e claude precisam de /etc/passwd e de um HOME).
+      args:
+        BOT_UID: "${BOT_UID:-1000}"
+        BOT_GID: "${BOT_GID:-1000}"
     image: agenda-whatsapp:local
     container_name: agenda-whatsapp
     restart: unless-stopped
     init: true
+    # A imagem traz o usuário `node`, que é uid 1000. O Ubuntu da Oracle cria o
+    # `ubuntu` como uid **1001**, e o bind mount abaixo preserva o dono do host:
+    # rodando como 1000 o processo não consegue nem criar a `.baileys_auth`
+    # ("EACCES: permission denied, mkdir '/app/.baileys_auth'"), e o container
+    # entra em laço de reinício. O `sync.sh` passa BOT_UID/BOT_GID do próprio
+    # servidor; o padrão 1000 serve para host onde o dono já é 1000.
+    user: "${BOT_UID:-1000}:${BOT_GID:-1000}"
     env_file:
       - ../.env
     volumes:
@@ -17,8 +29,16 @@ services:
       - ../:/app
       # node_modules é da imagem, não do host (o host é ARM Linux, o Mac não).
       - /app/node_modules
-      # Chave SSH para os comandos que precisam do Mac (claude:, ideia:, relatorio).
+      # Chave SSH para os comandos que precisam do Mac (ideia:, relatorio).
       - ~/.ssh:/home/node/.ssh:ro
+      # Espelho só-leitura dos documentos do Mac, empurrado por deploy/espelho.sh
+      # (roda no Mac a cada 10 min). Montado nos MESMOS caminhos absolutos do
+      # Mac, então a ponte `claude:` e os scripts não sabem em que máquina estão.
+      - ~/espelho/claude:/Users/luisazvedo/claude:ro
+      - ~/espelho/Documents/Clientes:/Users/luisazvedo/Documents/Clientes:ro
+      # ~/.claude do bot: memória, skills e regras (também vêm pelo espelho.sh)
+      # e as sessões que o `claude -p --resume` grava. Precisa ser gravável.
+      - ~/.claude-bot:/home/node/.claude
     logging:
       driver: json-file
       options:

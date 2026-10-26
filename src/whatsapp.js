@@ -69,6 +69,14 @@ function textoDaMensagem(mensagem) {
   );
 }
 
+// Texto da mensagem citada, quando esta é uma resposta a outra ("ok"
+// respondendo ao lembrete 🔔 de um evento). Qualquer tipo de mensagem (texto,
+// áudio, imagem) carrega a citação dentro do seu contextInfo.
+function textoCitado(mensagem) {
+  const ctx = Object.values(mensagem ?? {}).find((v) => v && typeof v === 'object' && v.contextInfo)?.contextInfo;
+  return textoDaMensagem(desembrulhar(ctx?.quotedMessage));
+}
+
 // Mensagens efêmeras e "view once" vêm embrulhadas em outra camada.
 function desembrulhar(mensagem) {
   return (
@@ -175,6 +183,13 @@ export class WhatsApp {
       // O bot não precisa marcar mensagens como lidas por conta própria.
       markOnlineOnConnect: false,
       syncFullHistory: false,
+      // O padrão do Baileys é 60s por QR. Quando o bot roda em servidor, o QR
+      // ainda precisa ser copiado de lá, chegar ao celular e ser escaneado —
+      // e 60s não sobrevivem a esse trajeto (falhou assim em 06/09/2026, com
+      // "QR refs attempts ended" no log e mensagem genérica de erro no
+      // WhatsApp). 3 minutos dão folga sem afrouxar nada: o QR continua de uso
+      // único e o vínculo continua sendo aprovado no celular.
+      qrTimeout: 180_000,
     });
     this.sock = sock;
 
@@ -270,6 +285,7 @@ export class WhatsApp {
         // de um desconhecido.
         autorId: m.key.participant || m.key.remoteJid,
         body: textoDaMensagem(conteudo),
+        citada: textoCitado(conteudo), // '' quando não é resposta a outra mensagem
         isAudio: Boolean(audio),
         nome: m.pushName ?? null,
         baixarAudio: audio
@@ -288,6 +304,39 @@ export class WhatsApp {
     // O Baileys devolve o que enviamos pelo mesmo evento de entrada, marcado
     // como 'append'. Guardar o id é o que impede o bot de tratar a própria
     // resposta como um comando novo no chat consigo mesmo.
+    lembrar(this.idsEnviados, enviada?.key?.id);
+  }
+
+  /**
+   * Envia um arquivo como documento (sem recompressão), com legenda opcional.
+   * Usado pelo outbox para entregar fotos/PDFs em qualidade original.
+   */
+  async sendDocument(chatId, caminho, legenda = '') {
+    if (!this.sock) throw new Error('WhatsApp ainda não inicializado');
+    const fs = await import('fs');
+    const path = await import('path');
+    const ext = path.extname(caminho).toLowerCase();
+    const mimes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.txt': 'text/plain', '.zip': 'application/zip' };
+    const enviada = await this.sock.sendMessage(normalizarId(chatId), {
+      document: fs.readFileSync(caminho),
+      mimetype: mimes[ext] ?? 'application/octet-stream',
+      fileName: path.basename(caminho),
+      caption: legenda || undefined,
+    });
+    lembrar(this.idsEnviados, enviada?.key?.id);
+  }
+
+  /**
+   * Envia uma imagem como foto (o WhatsApp recomprime, mas aparece inline na
+   * conversa, não como anexo). Para PDF ou qualidade original, sendDocument.
+   */
+  async sendImage(chatId, caminho, legenda = '') {
+    if (!this.sock) throw new Error('WhatsApp ainda não inicializado');
+    const fs = await import('fs');
+    const enviada = await this.sock.sendMessage(normalizarId(chatId), {
+      image: fs.readFileSync(caminho),
+      caption: legenda || undefined,
+    });
     lembrar(this.idsEnviados, enviada?.key?.id);
   }
 

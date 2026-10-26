@@ -19,7 +19,7 @@ Bot:   ✅ Agendado: Reunião com o cliente — dom., 06/07 15:00
 | Quando | O quê |
 |---|---|
 | Todo dia às 07:00 | Resumo da agenda do dia (horários, locais, links do Meet) |
-| Segunda às 07:00 | Resumo da semana agrupado por dia, com aniversários em destaque |
+| Todo dia às 07:01 | Próximos 7 dias agrupados por dia, com aniversários em destaque |
 | Todo dia às 21:00 | Prévia da agenda de amanhã |
 | 15 min antes de cada reunião | Lembrete com link do Meet pronto pra clicar |
 | Todo dia às 20:00 | **Checagem do dia**: pergunta lembrete a lembrete se foi feito — "N" posterga para amanhã automaticamente |
@@ -32,6 +32,7 @@ Fale como falaria com uma pessoa — a IA (Claude Haiku) interpreta:
 - **Cancelar:** *"cancela o dentista"*
 - **Consultar:** *"o que tenho amanhã?"*, `hoje`, `semana`, `livre`
 - **Lembretes mensais insistentes:** *"pagar cartão dia 10"* → cobranças crescentes (veja abaixo)
+- **Dar baixa:** *"gravação Hugo ok"*, *"feito reunião Lucas"* → tarefa ou evento de hoje ganha ✅. Ao lembrete 🔔 de um evento, basta responder `ok` (citando a mensagem ou até 2h depois). Esses formatos não dependem da IA: funcionam mesmo com a API fora do ar
 
 ### O fluxo que evita desastres
 O bot **nunca altera a agenda sem confirmação**:
