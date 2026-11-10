@@ -10,6 +10,11 @@ const TOKEN_PATH = path.resolve('token.json');
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  // Leitura de e-mail, só para a vigia de cobrança da Oracle (oracle-alertas.js).
+  // `readonly` é o escopo mais fechado que permite listar e ler cabeçalho: o bot
+  // não marca, move, responde nem apaga nada. Ao mudar esta lista é obrigatório
+  // apagar o token.json e reautorizar — token antigo não ganha escopo novo.
+  'https://www.googleapis.com/auth/gmail.readonly',
 ];
 const AUTH_PORT = 3535;
 

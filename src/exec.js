@@ -19,6 +19,11 @@ const SHELL = EH_MAC ? '/bin/zsh' : '/bin/bash';
 export const macRemotoDisponivel = !EH_MAC && Boolean(CONFIG.macSshHost);
 export const macDisponivel = EH_MAC || macRemotoDisponivel;
 
+// O ssh sai com 255 quando não chega ao outro lado (Mac desligado, dormindo,
+// sem rede). Qualquer outro código veio do comando que rodou lá.
+export const SSH_SEM_CONEXAO = 255;
+export const macForaDoAr = (resultado) => !EH_MAC && resultado.codigo === SSH_SEM_CONEXAO;
+
 // Escapa um valor para virar literal dentro de aspas simples do shell remoto.
 const aspasSimples = (valor) => `'${String(valor).replace(/'/g, `'\\''`)}'`;
 
@@ -54,7 +59,7 @@ function montarChamada(comando, { precisaMac, cwd, env }) {
  * Roda um comando e devolve { ok, saida } — nunca rejeita.
  * @param {string} comando
  * @param {{ cwd?: string, timeoutMs?: number, env?: Record<string,string>, precisaMac?: boolean }} opcoes
- * @returns {Promise<{ ok: boolean, saida: string }>}
+ * @returns {Promise<{ ok: boolean, saida: string, codigo: number|null }>}
  */
 export function rodarShell(comando, opcoes = {}) {
   const { cwd, timeoutMs = 30000, env = {}, precisaMac = false } = opcoes;
@@ -75,10 +80,13 @@ export function rodarShell(comando, opcoes = {}) {
     });
     let saida = '';
     let finalizado = false;
-    const concluir = (ok, extra = '') => {
+    // `codigo` é o exit code do processo (null em timeout ou erro de spawn).
+    // Quem chama por SSH usa o 255 para distinguir "Mac fora do ar" de
+    // "comando falhou no Mac".
+    const concluir = (ok, extra = '', codigo = null) => {
       if (finalizado) return;
       finalizado = true;
-      resolve({ ok, saida: (saida + extra).trim() });
+      resolve({ ok, saida: (saida + extra).trim(), codigo });
     };
     const timer = setTimeout(() => {
       proc.kill('SIGKILL');
@@ -87,7 +95,7 @@ export function rodarShell(comando, opcoes = {}) {
     proc.stdout.on('data', (d) => { saida += d; });
     proc.stderr.on('data', (d) => { saida += d; });
     proc.on('error', (err) => { clearTimeout(timer); concluir(false, `\n${err.message}`); });
-    proc.on('close', (code) => { clearTimeout(timer); concluir(code === 0); });
+    proc.on('close', (code) => { clearTimeout(timer); concluir(code === 0, '', code); });
   });
 }
 

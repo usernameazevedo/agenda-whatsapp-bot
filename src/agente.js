@@ -7,6 +7,7 @@
 import { CONFIG } from './config.js';
 import { buscarEventoPorTitulo, listarEventos } from './calendar.js';
 import { LOCALE, fmtDataHora, fmtHora, contextoAgora } from './i18n.js';
+import { erroApi } from './ia.js';
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -184,7 +185,7 @@ async function chamarAPI(body) {
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API Claude retornou ${res.status}`);
+  if (!res.ok) throw new Error(await erroApi(res));
   return res.json();
 }
 

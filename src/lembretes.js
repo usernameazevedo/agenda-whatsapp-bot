@@ -4,6 +4,21 @@ import { mensagemLembrete } from './formatar.js';
 
 const lembretesEnviados = new Set();
 
+// Último lembrete enviado: um "ok" seco logo depois dele é baixa naquele
+// evento (o lembrete é a última coisa que o bot disse). Vale por 2h, o que
+// cobre o evento em si e a resposta atrasada.
+const JANELA_OK_MS = 2 * 60 * 60 * 1000;
+let ultimoLembrete = null; // { evento, em }
+
+export function eventoDoUltimoLembrete() {
+  if (!ultimoLembrete || Date.now() - ultimoLembrete.em > JANELA_OK_MS) return null;
+  return ultimoLembrete.evento;
+}
+
+export function esquecerUltimoLembrete() {
+  ultimoLembrete = null;
+}
+
 // Roda a cada minuto: avisa CONFIG.lembreteMinutos antes de cada evento com horário.
 export async function verificarLembretes(auth, enviar) {
   const agora = new Date();
@@ -20,6 +35,7 @@ export async function verificarLembretes(auth, enviar) {
       if (msRestante > 0 && msRestante <= minutos * 60 * 1000) {
         lembretesEnviados.add(chave);
         await enviar(mensagemLembrete(evento, Math.round(msRestante / 60000)));
+        ultimoLembrete = { evento, em: Date.now() };
       }
     }
   }

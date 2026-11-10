@@ -25,12 +25,18 @@ rsync -az --delete \
   --exclude '.baileys_auth' \
   --exclude 'downtime.json' \
   --exclude 'execucoes.json' \
+  --exclude 'my-repo.json' \
+  --exclude 'alertas-oracle.json' \
   --exclude 'qr.png' \
+  --exclude 'envios' \
+  --exclude '*.bak-*' \
   --exclude 'agenda.log' \
   --exclude '.env' \
   --exclude 'tarefas.json' \
   --exclude 'followups.json' \
   --exclude 'outbox.json' \
+  --exclude 'bridge-sessao.json' \
+  --exclude 'deploy/espelho.log' \
   --exclude 'recorrentes.json' \
   --exclude 'token.json' \
   --exclude 'credentials.json' \
@@ -49,7 +55,10 @@ if [ "$COM_DADOS" = "1" ]; then
 fi
 
 echo "==> Reiniciando o container"
-ssh "${SERVIDOR}" "cd ${DESTINO} && docker compose -f deploy/docker-compose.yml up -d --build"
+# BOT_UID/BOT_GID vêm do próprio servidor: o container roda com o uid do dono
+# dos arquivos montados. Sem isso, host cujo usuário não é 1000 (o Ubuntu da
+# Oracle usa 1001) derruba o bot em EACCES ao gravar a sessão do WhatsApp.
+ssh "${SERVIDOR}" "cd ${DESTINO} && BOT_UID=\$(id -u) BOT_GID=\$(id -g) docker compose -f deploy/docker-compose.yml up -d --build"
 
 echo "==> Últimas linhas do log"
 ssh "${SERVIDOR}" "docker logs --tail 20 agenda-whatsapp"
