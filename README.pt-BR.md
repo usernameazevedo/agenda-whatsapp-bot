@@ -177,5 +177,5 @@ MIT — use, modifique e compartilhe à vontade.
 ## Autor
 
 Feito por **Luis Azevedo** — disponível para freelance / consultoria em vídeo, conteúdo pra redes e automação.
-📬 [username.azevedo@gmail.com](mailto:username.azevedo@gmail.com)
+📬 [contato@midianoxx.com](mailto:contato@midianoxx.com)
 
